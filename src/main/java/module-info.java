@@ -4,9 +4,7 @@ module com.deepmind {
     requires javafx.fxml;
     requires javafx.web;
 
-    // 2. 声明需要的第三方库模块
-    // 注意：flexmark 的模块名有时会根据版本变动，如果这里报错，
-    // 请尝试 requires flexmark; 或按照 IDE 提示修改
+    requires com.google.gson;
     requires flexmark;
     requires flexmark.util.ast;
     requires flexmark.util.data;
@@ -14,6 +12,8 @@ module com.deepmind {
     requires flexmark.util.html;
     requires flexmark.util.options;
 
+    //允许 Gson 访问你的 util 包进行数据的序列化和反序列化
+    opens com.deepmind.util to com.google.gson;
     // 3. 允许 JavaFX 反射访问你的控制器（极其重要）
     opens com.deepmind.controller to javafx.fxml;
 

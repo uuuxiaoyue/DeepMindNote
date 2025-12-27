@@ -1,53 +1,51 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.web.WebView?>
+<?import javafx.geometry.Insets?>
 
-<BorderPane prefHeight="600.0" prefWidth="1000.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.deepmind.controller.MainController">
-    <left>
-        <VBox spacing="10" style="-fx-background-color: #f8f9fa; -fx-border-color: #dee2e6; -fx-border-width: 0 1 0 0; -fx-padding: 15;">
-            <Label text="我的分类" style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #495057;"/>
-            <TreeView fx:id="categoryTree" prefWidth="180" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;"/>
-        </VBox>
-    </left>
+<SplitPane dividerPositions="0.2, 0.8" prefHeight="700.0" prefWidth="1100.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.deepmind.controller.MainController">
+    <items>
+        <VBox minWidth="200" maxWidth="400" spacing="10" style="-fx-background-color: #f8f9fa; -fx-padding: 10;">
+            <Label text="我的分类" style="-fx-font-weight: bold; -fx-text-fill: #495057;"/>
+            <TreeView fx:id="categoryTree" VBox.vgrow="ALWAYS" />
 
-    <center>
-        <VBox spacing="10" style="-fx-padding: 15; -fx-background-color: white; -fx-border-color: #dee2e6; -fx-border-width: 0 1 0 0;">
-            <HBox alignment="CENTER_LEFT" spacing="10">
-                <Label text="笔记列表" style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #495057;"/>
+            <Separator />
+
+            <HBox alignment="CENTER_LEFT" spacing="5">
+                <Label text="笔记列表" style="-fx-font-weight: bold;"/>
                 <Region HBox.hgrow="ALWAYS" />
-                <Button onAction="#handleNewNote" text="+" style="-fx-background-radius: 15; -fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;" />
+                <Button onAction="#handleNewNote" text="+" style="-fx-background-color: #007bff; -fx-text-fill: white; -fx-background-radius: 10;"/>
             </HBox>
-
-            <TextField fx:id="searchField" promptText="🔍 搜索笔记标题..." style="-fx-background-radius: 15; -fx-padding: 5 10; -fx-border-color: #e9ecef; -fx-border-radius: 15;"/>
-
-            <ListView fx:id="noteListView" VBox.vgrow="ALWAYS" style="-fx-background-radius: 5; -fx-border-color: #e9ecef;"/>
+            <TextField fx:id="searchField" promptText="🔍 搜索..." />
+            <ListView fx:id="noteListView" VBox.vgrow="ALWAYS" />
         </VBox>
-    </center>
 
-    <right>
-        <VBox prefWidth="620" spacing="10" style="-fx-padding: 15; -fx-background-color: white;">
-            <HBox alignment="CENTER_RIGHT" spacing="10">
+        <VBox spacing="10" style="-fx-padding: 10; -fx-background-color: white;">
+            <HBox spacing="10" alignment="CENTER_RIGHT">
                 <ToggleButton fx:id="btnEdit" onAction="#handleEditMode" selected="true" text="编辑">
-                    <toggleGroup>
-                        <ToggleGroup fx:id="modeGroup" />
-                    </toggleGroup>
+                    <toggleGroup><ToggleGroup fx:id="modeGroup" /></toggleGroup>
                 </ToggleButton>
                 <ToggleButton fx:id="btnPreview" onAction="#handlePreviewMode" text="预览" toggleGroup="$modeGroup" />
                 <Separator orientation="VERTICAL" />
-                <Button onAction="#handleSave" style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;" text="保存笔记" />
+                <Button onAction="#handleSave" style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold;" text="保存" />
+                <Button fx:id="toggleOutlineBtn" onAction="#toggleOutline" text="📑" style="-fx-background-color: #e9ecef;" />
             </HBox>
 
-            <StackPane VBox.vgrow="ALWAYS" style="-fx-border-color: #e9ecef; -fx-border-radius: 5; -fx-background-radius: 5;">
-                <TextArea fx:id="editorArea" promptText="在此输入 Markdown 内容..." style="-fx-font-family: 'Consolas', 'Monaco', monospace; -fx-font-size: 14px; -fx-background-color: white;" wrapText="true" />
+            <StackPane VBox.vgrow="ALWAYS">
+                <TextArea fx:id="editorArea" wrapText="true" style="-fx-font-family: 'Consolas', monospace; -fx-font-size: 15px;" />
                 <WebView fx:id="webView" visible="false" />
             </StackPane>
 
-            <HBox alignment="CENTER_RIGHT" style="-fx-padding: 2 5 0 5;">
-                <Label fx:id="wordCountLabel" text="字数: 0" style="-fx-text-fill: #adb5bd; -fx-font-size: 12px;" />
+            <HBox alignment="CENTER_RIGHT">
+                <Label fx:id="wordCountLabel" text="字数: 0" style="-fx-text-fill: #adb5bd;" />
             </HBox>
         </VBox>
-    </right>
-</BorderPane>
+
+        <VBox fx:id="outlineContainer" minWidth="0" maxWidth="250" spacing="10" style="-fx-padding: 10; -fx-background-color: #fdfdfd; -fx-border-color: #dee2e6; -fx-border-width: 0 0 0 1;">
+            <Label text="文章大纲" style="-fx-font-weight: bold; -fx-text-fill: #6c757d;"/>
+            <ListView fx:id="outlineListView" VBox.vgrow="ALWAYS" />
+        </VBox>
+    </items>
+</SplitPane>

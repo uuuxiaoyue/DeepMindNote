@@ -4,9 +4,13 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder; // 建议用这个，可以格式化 JSON
+
 
 public class FileUtil {
     private static final String BASE_DIR = "notes";
+    private static final Gson gson = new Gson();
 
     // 确保目录存在
     public static void initStorage() {
@@ -35,5 +39,22 @@ public class FileUtil {
     public static void delete(String title) throws IOException {
         Path filePath = Paths.get(BASE_DIR, title + ".md");
         Files.deleteIfExists(filePath);
+    }
+
+    // 保存元数据
+    public static void saveMetadata(String title, NoteMetadata meta) throws IOException {
+        Path path = Paths.get(BASE_DIR, title + ".json");
+        Files.writeString(path, gson.toJson(meta));
+    }
+
+    // 读取元数据
+    public static NoteMetadata readMetadata(String title) {
+        Path path = Paths.get(BASE_DIR, title + ".json");
+        if (!Files.exists(path)) return new NoteMetadata(); // 返回空对象防止报错
+        try {
+            return gson.fromJson(Files.readString(path), NoteMetadata.class);
+        } catch (IOException e) {
+            return new NoteMetadata();
+        }
     }
 }

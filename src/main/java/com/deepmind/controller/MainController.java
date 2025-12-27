@@ -2,8 +2,10 @@ package com.deepmind.controller;
 
 import com.deepmind.util.FileUtil;
 import com.deepmind.util.MarkdownParser;
+import com.deepmind.util.NoteMetadata;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import java.io.IOException;
 import java.util.List;
@@ -13,12 +15,13 @@ public class MainController {
     @FXML private WebView webView;
     @FXML private ListView<String> noteListView;
     @FXML private TreeView<String> categoryTree;
-
     // 追踪当前正在编辑的笔记文件名（不含.md）
     private String currentNoteTitle = "";
-
     @FXML private TextField searchField;
     @FXML private Label wordCountLabel;
+    @FXML private ListView<String> outlineListView;
+    @FXML private VBox outlineContainer;
+    @FXML private Button toggleOutlineBtn;
 
     @FXML
     public void initialize() {
@@ -33,6 +36,8 @@ public class MainController {
         setupSelectionListeners();
         setupContextMenu(); // 启用右键菜单
         setupSearch();    // 启用搜索
+        setupOutline();      // 右侧大纲会实时更新
+        showRandomReview();  // 启动时检查是否有需要复习的“烧脑”笔记
         setupWordCount(); // 启用字数统计
         showWelcomePage();
     }
@@ -124,26 +129,35 @@ public class MainController {
         });
     }
 
-    /**
-     * 保存按钮逻辑
-     * 绑定到 FXML 的保存按钮: onAction="#handleSave"
-     */
+
     @FXML
     private void handleSave() {
-        if (currentNoteTitle.isEmpty()) return;
+        if (currentNoteTitle == null || currentNoteTitle.isEmpty()) return;
+
         try {
             FileUtil.save(currentNoteTitle, editorArea.getText());
 
-            // 亮点交互：弹出情绪选择
-            List<String> emotions = List.of("😊 顺畅", "😐 平淡", "😫 痛苦", "🤯 烧脑");
-            ChoiceDialog<String> dialog = new ChoiceDialog<>("😊 顺畅", emotions);
-            dialog.setTitle("学习状态记录");
-            dialog.setHeaderText("记录一下此时的心情吧？");
-            dialog.setContentText("这篇笔记写得怎么样：");
+            // 统一心情定义
+            List<String> moods = List.of("😊 豁然开朗", "😐 平静如水", "😫 烧脑痛苦", "🧠 深度思考");
+            ChoiceDialog<String> dialog = new ChoiceDialog<>("😐 平静如水", moods);
+            dialog.setTitle("保存成功");
+            dialog.setHeaderText("记录一下此时的心境");
+            dialog.setContentText("心情状态:");
 
-            dialog.showAndWait().ifPresent(e -> {
-                System.out.println("笔记: " + currentNoteTitle + " | 状态: " + e);
-                // 这里你可以把心情存进 config.json (后面带你实现)
+            dialog.showAndWait().ifPresent(selectedMood -> {
+                NoteMetadata meta = FileUtil.readMetadata(currentNoteTitle);
+                meta.title = currentNoteTitle;
+                meta.lastMood = selectedMood;
+                // 模拟遗忘曲线
+                meta.nextReviewDate = java.time.LocalDate.now().plusDays(3).toString();
+
+                try {
+                    FileUtil.saveMetadata(currentNoteTitle, meta);
+                    // 更新底部状态栏显示
+                    wordCountLabel.setText("字数: " + editorArea.getText().length() + " | 最近心情: " + selectedMood);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             });
 
         } catch (IOException e) {
@@ -258,5 +272,71 @@ public class MainController {
             int count = newValue.length();
             wordCountLabel.setText("字数: " + count);
         });
+    }
+
+    private void showRandomReview() {
+        try {
+            List<String> all = FileUtil.listAllNotes();
+            if (all.isEmpty()) return;
+
+            // 随机抽一个
+            String randomTitle = all.get((int) (Math.random() * all.size()));
+            NoteMetadata meta = FileUtil.readMetadata(randomTitle);
+
+            // 只有心情不好的或者很久没看的才提醒（逻辑自拟）
+            if ("😫 压力山大".equals(meta.lastMood)) {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("复习提醒");
+                alert.setHeaderText("你之前记录这篇笔记时感到很辛苦...");
+                alert.setContentText("要不要回顾一下 [" + randomTitle + "]？");
+                alert.show();
+            }
+        } catch (IOException e) {}
+    }
+    private void setupOutline() {
+        // 1. 监听文本变化，实时提取标题
+        editorArea.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal == null) return;
+
+            List<String> headings = new java.util.ArrayList<>();
+            String[] lines = newVal.split("\n");
+            for (String line : lines) {
+                String trimmedLine = line.trim();
+                // 匹配 # 开头的 Markdown 标题
+                if (trimmedLine.startsWith("#")) {
+                    headings.add(trimmedLine);
+                }
+            }
+            outlineListView.getItems().setAll(headings);
+        });
+
+        // 2. 点击大纲项，跳转到编辑器对应位置
+        outlineListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String content = editorArea.getText();
+                int index = content.indexOf(newVal);
+                if (index != -1) {
+                    editorArea.requestFocus();
+                    // 选中标题并让光标跳转
+                    editorArea.selectRange(index, index + newVal.length());
+                }
+            }
+        });
+    }
+
+    @FXML
+    private void toggleOutline() {
+        boolean isVisible = outlineContainer.isManaged();
+        if (isVisible) {
+            // 隐藏
+            outlineContainer.setVisible(false);
+            outlineContainer.setManaged(false);
+            toggleOutlineBtn.setText("展开大纲");
+        } else {
+            // 显示
+            outlineContainer.setVisible(true);
+            outlineContainer.setManaged(true);
+            toggleOutlineBtn.setText("📑");
+        }
     }
 }
