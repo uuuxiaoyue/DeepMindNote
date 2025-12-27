@@ -1,0 +1,262 @@
+package com.deepmind.controller;
+
+import com.deepmind.util.FileUtil;
+import com.deepmind.util.MarkdownParser;
+import javafx.fxml.FXML;
+import javafx.scene.control.*;
+import javafx.scene.web.WebView;
+import java.io.IOException;
+import java.util.List;
+
+public class MainController {
+    @FXML private TextArea editorArea;
+    @FXML private WebView webView;
+    @FXML private ListView<String> noteListView;
+    @FXML private TreeView<String> categoryTree;
+
+    // 追踪当前正在编辑的笔记文件名（不含.md）
+    private String currentNoteTitle = "";
+
+    @FXML private TextField searchField;
+    @FXML private Label wordCountLabel;
+
+    @FXML
+    public void initialize() {
+        FileUtil.initStorage();
+        initCategoryTree();
+
+        // 关键：监听 TreeView 变化来过滤列表
+        categoryTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            refreshNoteList();
+        });
+
+        setupSelectionListeners();
+        setupContextMenu(); // 启用右键菜单
+        setupSearch();    // 启用搜索
+        setupWordCount(); // 启用字数统计
+        showWelcomePage();
+    }
+
+    private void initCategoryTree() {
+        TreeItem<String> root = new TreeItem<>("全部笔记");
+        root.getChildren().add(new TreeItem<>("课程学习"));
+        root.getChildren().add(new TreeItem<>("个人项目"));
+        categoryTree.setRoot(root);
+        categoryTree.setShowRoot(true);
+    }
+
+    /**
+     * 从磁盘读取所有 .md 文件并显示在中间列表中
+     */
+    private void refreshNoteList() {
+        try {
+            List<String> allFiles = FileUtil.listAllNotes();
+            TreeItem<String> selectedItem = categoryTree.getSelectionModel().getSelectedItem();
+
+            if (selectedItem == null || selectedItem.getValue().equals("全部笔记")) {
+                // 显示所有笔记，但去掉文件名的前缀显示
+                noteListView.getItems().setAll(allFiles);
+            } else {
+                // 过滤出包含当前分类名称的文件
+                String filter = selectedItem.getValue() + "_";
+                List<String> filtered = allFiles.stream()
+                        .filter(name -> name.startsWith(filter))
+                        .toList();
+                noteListView.getItems().setAll(filtered);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setupContextMenu() {
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem deleteItem = new MenuItem("删除笔记");
+        deleteItem.setStyle("-fx-text-fill: red;");
+
+        deleteItem.setOnAction(event -> {
+            String selected = noteListView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                // 弹出确认对话框
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "确定要删除 [" + selected + "] 吗？", ButtonType.YES, ButtonType.NO);
+                alert.showAndWait().ifPresent(response -> {
+                    if (response == ButtonType.YES) {
+                        try {
+                            FileUtil.delete(selected);
+                            refreshNoteList(); // 刷新界面
+                            showWelcomePage(); // 回到欢迎页
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+        });
+
+        contextMenu.getItems().add(deleteItem);
+        // 绑定到列表
+        noteListView.setContextMenu(contextMenu);
+    }
+
+    /**
+     * 新建笔记按钮逻辑
+     * 绑定到 FXML 的新建按钮: onAction="#handleNewNote"
+     */
+    @FXML
+    private void handleNewNote() {
+        // 获取当前 TreeView 选中的分类
+        TreeItem<String> selectedCategory = categoryTree.getSelectionModel().getSelectedItem();
+        String categoryPrefix = (selectedCategory != null && selectedCategory.getParent() != null)
+                ? selectedCategory.getValue() + "_" : "";
+
+        TextInputDialog dialog = new TextInputDialog("新笔记");
+        dialog.setTitle("新建笔记");
+        dialog.setHeaderText("在 [" + (categoryPrefix.isEmpty() ? "全部" : selectedCategory.getValue()) + "] 下创建笔记");
+
+        dialog.showAndWait().ifPresent(name -> {
+            String fullTitle = categoryPrefix + name; // 实际存的文件名是 "分类_名称"
+            try {
+                FileUtil.save(fullTitle, "# " + name);
+                refreshNoteList(); // 刷新列表
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    /**
+     * 保存按钮逻辑
+     * 绑定到 FXML 的保存按钮: onAction="#handleSave"
+     */
+    @FXML
+    private void handleSave() {
+        if (currentNoteTitle.isEmpty()) return;
+        try {
+            FileUtil.save(currentNoteTitle, editorArea.getText());
+
+            // 亮点交互：弹出情绪选择
+            List<String> emotions = List.of("😊 顺畅", "😐 平淡", "😫 痛苦", "🤯 烧脑");
+            ChoiceDialog<String> dialog = new ChoiceDialog<>("😊 顺畅", emotions);
+            dialog.setTitle("学习状态记录");
+            dialog.setHeaderText("记录一下此时的心情吧？");
+            dialog.setContentText("这篇笔记写得怎么样：");
+
+            dialog.showAndWait().ifPresent(e -> {
+                System.out.println("笔记: " + currentNoteTitle + " | 状态: " + e);
+                // 这里你可以把心情存进 config.json (后面带你实现)
+            });
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    private void handleEditMode() {
+        editorArea.setVisible(true);
+        webView.setVisible(false);
+    }
+
+    @FXML
+    private void handlePreviewMode() {
+        updatePreview();
+        editorArea.setVisible(false);
+        webView.setVisible(true);
+    }
+
+    private void updatePreview() {
+        String mdContent = editorArea.getText();
+        String html = MarkdownParser.parse(mdContent);
+        webView.getEngine().loadContent(html);
+    }
+
+    private void loadNoteContent(String title) {
+        try {
+            currentNoteTitle = title;
+            String content = FileUtil.read(title);
+            editorArea.setText(content);
+
+            // 如果当前在预览模式，切换笔记时自动更新预览内容
+            if (webView.isVisible()) {
+                updatePreview();
+            }
+        } catch (IOException e) {
+            editorArea.setText("读取文件失败: " + e.getMessage());
+        }
+    }
+
+    private void showWelcomePage() {
+        String welcomeMD = "# 欢迎使用 DeepMind Note\n\n" +
+                "### 快速上手指南：\n" +
+                "1. **新建**：点击新建按钮创建您的第一篇笔记。\n" +
+                "2. **编辑**：在右侧区域输入 Markdown 语法内容。\n" +
+                "3. **预览**：点击预览模式查看排版效果。\n" +
+                "4. **保存**：养成随时保存的好习惯！\n\n" +
+                "> 这是一个基于 JavaFX 的交互式笔记演示原型。";
+        editorArea.setText(welcomeMD);
+        currentNoteTitle = ""; // 欢迎页不对应具体文件，防止误覆盖
+        updatePreview();
+        handlePreviewMode();
+    }
+
+    private void setupSelectionListeners() {
+        // 监听笔记列表点击事件
+        noteListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                try {
+                    // 1. 更新当前正在编辑的文件名
+                    currentNoteTitle = newVal;
+
+                    // 2. 从磁盘读取内容
+                    String content = FileUtil.read(newVal);
+
+                    // 3. 将内容填入编辑器
+                    editorArea.setText(content);
+
+                    // 4. 如果当前处于预览模式，自动更新预览
+                    if (webView.isVisible()) {
+                        updatePreview();
+                    }
+                } catch (IOException e) {
+                    // 如果是“欢迎使用”这种不存在真实文件的项，展示欢迎页
+                    if (newVal.equals("欢迎使用 DeepMind Note")) {
+                        showWelcomePage();
+                    } else {
+                        System.err.println("读取文件失败: " + e.getMessage());
+                    }
+                }
+            }
+        });
+    }
+
+    private void setupSearch() {
+        searchField.textProperty().addListener((observable, oldValue, newValue) -> {
+            try {
+                // 1. 获取所有真实的文件名
+                List<String> allNotes = FileUtil.listAllNotes();
+
+                // 2. 过滤出包含关键字的内容
+                List<String> filteredNotes = allNotes.stream()
+                        .filter(name -> name.toLowerCase().contains(newValue.toLowerCase()))
+                        .toList();
+
+                // 3. 更新列表显示
+                noteListView.getItems().setAll(filteredNotes);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private void setupWordCount() {
+        editorArea.textProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == null) {
+                wordCountLabel.setText("字数: 0");
+                return;
+            }
+            // 简单的字数统计（包含中英文和空格）
+            int count = newValue.length();
+            wordCountLabel.setText("字数: " + count);
+        });
+    }
+}

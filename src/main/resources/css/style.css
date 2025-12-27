@@ -1,0 +1,17 @@
+.list-view, .tree-view {
+    -fx-background-color: transparent;
+    -fx-border-color: #e0e0e0;
+}
+
+.button {
+    -fx-cursor: hand;
+    -fx-background-radius: 5;
+    -fx-padding: 5 15;
+}
+
+/* 让编辑器看起来更舒服 */
+.text-area {
+    -fx-font-family: "Consolas", "Monospace";
+    -fx-font-size: 14px;
+    -fx-border-color: transparent;
+}

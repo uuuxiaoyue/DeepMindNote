@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.web.WebView?>
+
+<BorderPane prefHeight="600.0" prefWidth="1000.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.deepmind.controller.MainController">
+    <left>
+        <VBox spacing="10" style="-fx-background-color: #f8f9fa; -fx-border-color: #dee2e6; -fx-border-width: 0 1 0 0; -fx-padding: 15;">
+            <Label text="我的分类" style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #495057;"/>
+            <TreeView fx:id="categoryTree" prefWidth="180" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;"/>
+        </VBox>
+    </left>
+
+    <center>
+        <VBox spacing="10" style="-fx-padding: 15; -fx-background-color: white; -fx-border-color: #dee2e6; -fx-border-width: 0 1 0 0;">
+            <HBox alignment="CENTER_LEFT" spacing="10">
+                <Label text="笔记列表" style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #495057;"/>
+                <Region HBox.hgrow="ALWAYS" />
+                <Button onAction="#handleNewNote" text="+" style="-fx-background-radius: 15; -fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;" />
+            </HBox>
+
+            <TextField fx:id="searchField" promptText="🔍 搜索笔记标题..." style="-fx-background-radius: 15; -fx-padding: 5 10; -fx-border-color: #e9ecef; -fx-border-radius: 15;"/>
+
+            <ListView fx:id="noteListView" VBox.vgrow="ALWAYS" style="-fx-background-radius: 5; -fx-border-color: #e9ecef;"/>
+        </VBox>
+    </center>
+
+    <right>
+        <VBox prefWidth="620" spacing="10" style="-fx-padding: 15; -fx-background-color: white;">
+            <HBox alignment="CENTER_RIGHT" spacing="10">
+                <ToggleButton fx:id="btnEdit" onAction="#handleEditMode" selected="true" text="编辑">
+                    <toggleGroup>
+                        <ToggleGroup fx:id="modeGroup" />
+                    </toggleGroup>
+                </ToggleButton>
+                <ToggleButton fx:id="btnPreview" onAction="#handlePreviewMode" text="预览" toggleGroup="$modeGroup" />
+                <Separator orientation="VERTICAL" />
+                <Button onAction="#handleSave" style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;" text="保存笔记" />
+            </HBox>
+
+            <StackPane VBox.vgrow="ALWAYS" style="-fx-border-color: #e9ecef; -fx-border-radius: 5; -fx-background-radius: 5;">
+                <TextArea fx:id="editorArea" promptText="在此输入 Markdown 内容..." style="-fx-font-family: 'Consolas', 'Monaco', monospace; -fx-font-size: 14px; -fx-background-color: white;" wrapText="true" />
+                <WebView fx:id="webView" visible="false" />
+            </StackPane>
+
+            <HBox alignment="CENTER_RIGHT" style="-fx-padding: 2 5 0 5;">
+                <Label fx:id="wordCountLabel" text="字数: 0" style="-fx-text-fill: #adb5bd; -fx-font-size: 12px;" />
+            </HBox>
+        </VBox>
+    </right>
+</BorderPane>
