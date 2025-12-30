@@ -1,17 +1,306 @@
+/* style.css - 终极修复版 (顶天立地菜单栏) */
+
+/* ================== 1. 颜色变量定义 ================== */
+
+/* --- 默认: 极简蓝 (Default Blue) --- */
+.root {
+    -color-primary: #3574f0;          /* 主色调 */
+    -color-bg-base: #ffffff;          /* 编辑区背景 */
+    -color-bg-panel: #f3f3f3;         /* 侧边栏/工具栏背景 (浅灰) */
+    -color-bg-header: #ffffff;        /* 顶部栏背景 */
+    -color-text-main: #212529;        /* 主要文字 (深灰) */
+    -color-text-muted: #6c757d;       /* 次要文字/图标 */
+    -color-border: #d1d1d1;           /* 边框 */
+    -color-hover: #e9ecef;            /* 悬停高亮 */
+    -color-selection: #cce5ff;        /* 选中底色 */
+    -color-selection-text: #004085;   /* 选中文字颜色 */
+}
+
+/* --- 主题: 暗夜黑 (Dark Mode - 深度修复) --- */
+.theme-dark {
+    -color-primary: #5c85d6;          /* 稍微柔和一点的蓝 */
+
+    /* 彻底的深色背景 */
+    -color-bg-base: #1e1f22;          /* 编辑区 (深黑) */
+    -color-bg-panel: #2b2d30;         /* 侧边栏 (稍浅黑) */
+    -color-bg-header: #2b2d30;        /* 顶部栏 */
+
+    /* 高对比度文字 */
+    -color-text-main: #dfe1e5;        /* 亮灰白 (修复看不清的问题) */
+    -color-text-muted: #8a9199;       /* 次要文字 */
+
+    -color-border: #393b40;           /* 深色边框 */
+    -color-hover: #35383d;            /* 悬停 */
+    -color-selection: #2f476e;        /* 深蓝选中底色 */
+    -color-selection-text: #ffffff;   /* 选中文字变白 */
+}
+
+/* --- 主题: 森系绿 (Green) --- */
+.theme-green {
+    -color-primary: #42b983;
+    -color-bg-base: #fcfdfc;
+    -color-bg-panel: #f0f9f4;
+    -color-bg-header: #ffffff;
+    -color-text-main: #2c3e50;
+    -color-text-muted: #7f8c8d;
+    -color-border: #e0f2e9;
+    -color-hover: #e8f5e9;
+    -color-selection: #a8e6cf;
+    -color-selection-text: #1b4d3e;
+}
+
+/* --- 主题: 暖阳橙 (Orange) --- */
+.theme-orange {
+    -color-primary: #ff9f43;
+    -color-bg-base: #fffdf9;
+    -color-bg-panel: #fff5e6;
+    -color-bg-header: #ffffff;
+    -color-text-main: #5d4037;
+    -color-text-muted: #a1887f;
+    -color-border: #ffe0b2;
+    -color-hover: #fff3e0;
+    -color-selection: #ffe0b2;
+    -color-selection-text: #5d4037;
+}
+
+/* ================== 2. 全局基础重置 ================== */
+
+.root, .split-pane, .vbox, .hbox {
+    -fx-background-color: transparent;
+}
+
+/* 强制应用背景色到特定的区域 */
+.sidebar {
+    -fx-background-color: -color-bg-panel;
+    -fx-border-color: transparent -color-border transparent transparent;
+}
+
+/* 中间编辑区背景 */
+#splitPane > .split-pane-divider {
+    -fx-background-color: -color-bg-base;
+    -fx-border-color: transparent;
+}
+.split-pane {
+    -fx-background-color: -color-bg-base;
+}
+
+/* ================== 3. 顶部工具栏 (核心修改：顶天立地) ================== */
+
+/* 1. 容器：去除内边距，让内部元素能贴边 */
+.top-bar {
+    -fx-padding: 0;            /* 关键：去掉容器留白 */
+    -fx-spacing: 0;            /* 关键：去掉默认间距，改用按钮自身的 padding 控制 */
+    -fx-alignment: CENTER_LEFT;
+    -fx-min-height: 35px;      /* 设定一个标准高度 */
+
+    -fx-background-color: -color-bg-header;
+    -fx-border-color: transparent transparent -color-border transparent;
+}
+
+/* 2. 菜单栏容器：背景透明，去边距 */
+.menu-bar {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+}
+.menu-bar .container {
+    -fx-padding: 0;
+}
+
+/* 3. 菜单按钮 (File, Edit...) 样式重塑 */
+.menu-bar > .container > .menu-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;  /* 关键：去圆角，变成直角矩形 */
+    -fx-background-insets: 0;  /* 充满整个区域 */
+    -fx-padding: 0 15;         /* 上下0，左右15，高度由 .top-bar 决定，自动填满 */
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+    -fx-alignment: CENTER;
+    -fx-max-height: Infinity;  /* 确保高度填满父容器 */
+}
+
+/* 4. 菜单文字颜色 */
+.menu-bar > .container > .menu-button > .label {
+    -fx-text-fill: -color-text-main;
+}
+
+/* 5. 菜单交互颜色 (跟随主题) */
+/* 悬停 (Hover) - 变成主题定义的悬停色 */
+.menu-bar > .container > .menu-button:hover {
+    -fx-background-color: -color-hover;
+}
+
+/* 选中/打开 (Showing) - 变成主题定义的选中色 */
+.menu-bar > .container > .menu-button:showing,
+.menu-bar > .container > .menu-button:focused {
+    -fx-background-color: -color-selection;
+}
+
+/* 选中时文字变色 (防止在深色背景下看不清) */
+.menu-bar > .container > .menu-button:showing > .label,
+.menu-bar > .container > .menu-button:focused > .label {
+    -fx-text-fill: -color-selection-text;
+}
+
+/* ================== 4. 修复其他顶部按钮 (如侧边栏开关) ================== */
+
+/* 让侧边栏开关按钮也顶天立地，风格统一 */
+#btnToggleSidebar {
+    -fx-background-radius: 0;
+    -fx-background-insets: 0;
+    -fx-padding: 0 15;
+    -fx-max-height: Infinity; /* 撑满高度 */
+    -fx-border-color: transparent;
+}
+#btnToggleSidebar:hover {
+    -fx-background-color: -color-hover;
+}
+#btnToggleSidebar:selected {
+    -fx-background-color: -color-selection;
+    -fx-text-fill: -color-selection-text;
+}
+
+/* 右侧的主题选择器等微调 */
+.top-bar .separator .line {
+    -fx-border-insets: 8 0 8 0; /* 分割线上下缩进一点，不要顶天立地 */
+}
+.top-bar .choice-box {
+    -fx-background-radius: 3;
+    -fx-padding: 2 8;
+    -fx-margin: 0 10 0 0;
+}
+
+/* ================== 5. 列表与树 (修复白底问题) ================== */
+
 .list-view, .tree-view {
     -fx-background-color: transparent;
-    -fx-border-color: #e0e0e0;
+    -fx-background-insets: 0;
+    -fx-padding: 5;
 }
 
-.button {
-    -fx-cursor: hand;
-    -fx-background-radius: 5;
-    -fx-padding: 5 15;
+.list-view .virtual-flow .clipped-container,
+.tree-view .virtual-flow .clipped-container,
+.list-view .scroll-bar,
+.tree-view .scroll-bar {
+    -fx-background-color: transparent;
 }
 
-/* 让编辑器看起来更舒服 */
+.list-cell, .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -color-text-main;
+    -fx-padding: 5 8;
+}
+
+.list-cell:filled:selected, .tree-cell:filled:selected,
+.list-cell:filled:selected:hover, .tree-cell:filled:selected:hover {
+    -fx-background-color: -color-selection;
+    -fx-text-fill: -color-selection-text;
+}
+
+.list-cell:filled:hover, .tree-cell:filled:hover {
+    -fx-background-color: -color-hover;
+    -fx-text-fill: -color-text-main;
+}
+
+/* ================== 6. 编辑器与组件 ================== */
+
 .text-area {
+    -fx-text-fill: -color-text-main;
+    -fx-background-color: transparent;
+    -fx-display-caret: true;
+}
+.text-area .content {
+    -fx-background-color: -color-bg-base;
+    -fx-cursor: text;
+}
+
+.label { -fx-text-fill: -color-text-main; }
+.text-muted { -fx-text-fill: -color-text-muted; }
+
+/* 通用按钮 (不包含顶部特殊处理的按钮) */
+.button, .toggle-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -color-text-main;
+    -fx-cursor: hand;
+    -fx-background-radius: 4;
+    -fx-border-color: transparent;
+    -fx-padding: 5 10;
+}
+.button:hover, .toggle-button:hover {
+    -fx-background-color: -color-hover;
+}
+.toggle-button:selected {
+    -fx-background-color: -color-selection;
+    -fx-text-fill: -color-selection-text;
+}
+
+/* 侧边栏新建图标 */
+.icon-btn-small {
+    -fx-background-color: transparent;
+    -fx-padding: 4 6;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+}
+.icon-btn-small:hover {
+    -fx-background-color: -color-hover;
+    -fx-background-radius: 4;
+}
+.icon-btn-small SVGPath { -fx-fill: -color-text-muted; }
+.icon-btn-small:hover SVGPath { -fx-fill: -color-text-main; }
+
+/* ================== 7. 状态栏 ================== */
+
+.status-bar {
+    -fx-padding: 5 10;
+    -fx-border-color: -color-border transparent transparent transparent;
+    -fx-background-color: -color-bg-base;
+}
+
+.status-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: -color-text-muted;
     -fx-font-family: "Consolas", "Monospace";
     -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 2 8;
+    -fx-cursor: hand;
     -fx-border-color: transparent;
+}
+.status-btn:hover {
+    -fx-background-color: -color-hover;
+    -fx-text-fill: -color-text-main;
+    -fx-background-radius: 4;
+}
+.status-btn:pressed {
+    -fx-background-color: -color-selection;
+    -fx-text-fill: -color-selection-text;
+}
+
+/* ================== 8. 弹窗与提示 ================== */
+
+.context-menu {
+    -fx-background-color: -color-bg-panel;
+    -fx-border-color: -color-border;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 10, 0, 0, 5);
+}
+.menu-item .label { -fx-text-fill: -color-text-main; }
+.menu-item:focused {
+    -fx-background-color: -color-selection;
+}
+.menu-item:focused .label { -fx-text-fill: -color-selection-text; }
+
+.tooltip {
+    -fx-background-color: rgba(40, 40, 40, 0.9);
+    -fx-border-color: #6c757d;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-padding: 6 10;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 10, 0, 0, 5);
+}
+.theme-dark .tooltip {
+    -fx-background-color: #3b3f42;
+    -fx-border-color: #5c5c5c;
+    -fx-text-fill: #e0e0e0;
 }
