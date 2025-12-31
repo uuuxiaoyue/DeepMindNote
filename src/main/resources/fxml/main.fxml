@@ -23,23 +23,25 @@
                 <Menu text="文件(F)">
                     <items>
                         <MenuItem text="新建" accelerator="Ctrl+N" onAction="#handleNewNote"/>
-                        <MenuItem text="新建窗口" accelerator="Ctrl+Shift+N"/>
+                        <MenuItem text="新建窗口" accelerator="Ctrl+Shift+N" onAction="#handleNewWindow"/>
                         <SeparatorMenuItem />
-                        <MenuItem text="打开..." accelerator="Ctrl+O"/>
-                        <MenuItem text="打开文件夹..."/>
+
+                        <MenuItem text="打开..." accelerator="Ctrl+O" onAction="#handleOpenFile"/>
+                        <MenuItem text="打开文件夹..." onAction="#handleOpenFolder"/>
                         <SeparatorMenuItem />
-                        <MenuItem text="快速打开..." accelerator="Ctrl+P"/>
-                        <Menu text="打开最近文件"/>
-                        <SeparatorMenuItem />
+
+                        <MenuItem text="快速打开..." accelerator="Ctrl+P" onAction="#handleQuickOpen"/>
+                        <Menu fx:id="recentFilesMenu" text="打开最近文件"/> <SeparatorMenuItem />
+
                         <MenuItem text="保存" accelerator="Ctrl+S" onAction="#handleSave"/>
-                        <MenuItem text="另存为..." accelerator="Ctrl+Shift+S"/>
-                        <MenuItem text="保存全部打开的文件..."/>
+                        <MenuItem text="另存为..." accelerator="Ctrl+Shift+S" onAction="#handleSaveAs"/>
+                        <MenuItem text="保存全部打开的文件..." onAction="#handleSave"/> <SeparatorMenuItem />
+
+                        <MenuItem text="属性..." onAction="#handleShowProperties"/>
+                        <MenuItem text="打开文件位置..." onAction="#handleOpenFolder"/>
+                        <MenuItem text="删除..." onAction="#handleDelete"/>
                         <SeparatorMenuItem />
-                        <MenuItem text="属性..."/>
-                        <MenuItem text="打开文件位置..."/>
-                        <MenuItem text="在侧边栏中显示"/>
-                        <MenuItem text="删除..."/>
-                        <SeparatorMenuItem />
+
                         <MenuItem text="导入..." accelerator="Ctrl+I" onAction="#handleImport"/>
                         <Menu text="导出">
                             <items>
@@ -52,14 +54,17 @@
                                 <SeparatorMenuItem />
                                 <MenuItem text="长图分享 (.png)" onAction="#handleExportImage" />
                             </items>
-                        </Menu>                        <MenuItem text="打印..." accelerator="Alt+Shift+P"/>
+                        </Menu>
+
+                        <MenuItem text="打印..." accelerator="Alt+Shift+P" onAction="#handlePrint"/>
                         <SeparatorMenuItem />
+
                         <MenuItem text="偏好设置..." accelerator="Ctrl+,"/>
                         <SeparatorMenuItem />
-                        <MenuItem text="关闭" accelerator="Ctrl+W"/>
+
+                        <MenuItem text="关闭" accelerator="Ctrl+W" onAction="#handleClose"/>
                     </items>
                 </Menu>
-
                 <Menu text="编辑(E)">
                     <items>
                         <MenuItem text="撤销" accelerator="Ctrl+Z"/>

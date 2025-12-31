@@ -4,6 +4,7 @@ import com.deepmind.util.FileUtil;
 import com.deepmind.util.MarkdownParser;
 import com.deepmind.util.NoteMetadata;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
@@ -721,5 +722,184 @@ public class MainController {
         javafx.scene.image.WritableImage image = webView.snapshot(null, null);
         java.awt.image.BufferedImage bufferedImage = javafx.embed.swing.SwingFXUtils.fromFXImage(image, null);
         javax.imageio.ImageIO.write(bufferedImage, "png", file);
+    }
+
+    @FXML
+    private void handleQuickOpen() {
+        // 1. 创建弹窗容器
+        VBox container = new VBox(10);
+        container.setPadding(new javafx.geometry.Insets(10));
+        container.setStyle("-fx-background-color: #ffffff; -fx-border-color: #cccccc; -fx-border-radius: 5;");
+
+        TextField searchBar = new TextField();
+        searchBar.setPromptText("按文件名查找");
+        searchBar.setStyle("-fx-font-size: 14px;");
+
+        ListView<String> listView = new ListView<>();
+        listView.setPrefHeight(250);
+
+        // 2. 加载数据（从 FileUtil 获取所有笔记）
+        try {
+            List<String> allNotes = FileUtil.listAllNotes();
+            listView.getItems().setAll(allNotes);
+
+            // 3. 搜索过滤逻辑
+            searchBar.textProperty().addListener((obs, oldVal, newVal) -> {
+                List<String> filtered = allNotes.stream()
+                        .filter(s -> s.toLowerCase().contains(newVal.toLowerCase()))
+                        .collect(java.util.stream.Collectors.toList());
+                listView.getItems().setAll(filtered);
+            });
+        } catch (IOException e) { e.printStackTrace(); }
+
+        container.getChildren().addAll(searchBar, new Label("最近打开的文件"), listView);
+
+        // 4. 创建 Stage (弹窗窗口)
+        javafx.stage.Stage popupStage = new javafx.stage.Stage();
+        popupStage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        popupStage.initStyle(javafx.stage.StageStyle.UNDECORATED); // 无边框更美观
+        popupStage.setScene(new javafx.scene.Scene(container, 400, 350));
+
+        // 5. 选择并跳转逻辑
+        listView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                loadNoteContent(newVal);
+                popupStage.close();
+            }
+        });
+
+        popupStage.show();
+    }
+
+    @FXML
+    private void handleNewWindow() {
+        try {
+            // 重新加载 FXML 创建新的窗口实例
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/fxml/main.fxml"));
+            javafx.scene.Scene scene = new javafx.scene.Scene(fxmlLoader.load());
+            javafx.stage.Stage newStage = new javafx.stage.Stage();
+            newStage.setTitle("DeepMind Note - New Window");
+            newStage.setScene(scene);
+            newStage.show();
+        } catch (IOException e) {
+            showError("新建窗口失败", e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleOpenFile() {
+        javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
+        fileChooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Markdown", "*.md"));
+        java.io.File file = fileChooser.showOpenDialog(rootContainer.getScene().getWindow());
+
+        if (file != null) {
+            try {
+                String content = FileUtil.readFromExternal(file);
+                editorArea.setText(content);
+                currentNoteTitle = ""; // 清空当前标题，防止误删库内同名文件
+                handleEditMode();
+            } catch (IOException e) {
+                showError("打开失败", e.getMessage());
+            }
+        }
+    }
+
+    // 打开系统资源管理器 (定位到笔记根目录)
+    @FXML
+    private void handleOpenFolder() {
+        try {
+            // 使用 java.desktop 模块功能
+            java.awt.Desktop.getDesktop().open(new java.io.File("notes"));
+        } catch (IOException e) {
+            showError("打开失败", "无法访问存储目录: " + e.getMessage());
+        }
+    }
+
+    // 另存为 (复用 Markdown 导出逻辑)
+    @FXML
+    private void handleSaveAs() {
+        handleExportMarkdown(); // 逻辑一致，弹出文件选择器存至外部
+    }
+
+    // 弹出属性对话框 (展示 NoteMetadata 信息)
+    @FXML
+    private void handleShowProperties() {
+        if (currentNoteTitle == null || currentNoteTitle.isEmpty()) return;
+
+        // 从 FileUtil 加载该笔记的元数据
+        NoteMetadata meta = FileUtil.readMetadata(currentNoteTitle);
+
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("笔记属性");
+        alert.setHeaderText("文件: " + currentNoteTitle + ".md");
+
+        // 构建显示内容
+        String content = String.format(
+                "最后心情: %s\n复习次数: %d\n下次复习: %s\n创建日期: %s",
+                meta.lastMood != null ? meta.lastMood : "无记录",
+                meta.reviewCount,
+                meta.nextReviewDate != null ? meta.nextReviewDate : "未排期",
+                meta.createDate != null ? meta.createDate : "未知"
+        );
+
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
+    //  执行删除当前笔记逻辑
+    @FXML
+    private void handleDelete() {
+        if (currentNoteTitle == null || currentNoteTitle.isEmpty()) return;
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "确定要删除笔记 [" + currentNoteTitle + "] 吗？", ButtonType.YES, ButtonType.NO);
+        alert.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                try {
+                    FileUtil.delete(currentNoteTitle); // 从磁盘删除
+                    refreshFileTree(); // 刷新左侧树
+                    showWelcomePage(); // 回到欢迎页
+                } catch (IOException e) {
+                    showError("删除失败", e.getMessage());
+                }
+            }
+        });
+    }
+
+    //  实现打印逻辑 (利用 WebView 引擎)
+    @FXML
+    private void handlePrint() {
+        // 1. 获取 WebEngine
+        javafx.scene.web.WebEngine engine = webView.getEngine();
+
+        // 2. 确保在打印前，WebView 里的内容是最新的 Markdown 渲染结果
+        // 如果当前处于编辑模式（WebView 可能是隐藏的），先静默更新一下
+        updatePreview();
+
+        // 3. 创建打印作业 (PrinterJob)
+        javafx.print.PrinterJob job = javafx.print.PrinterJob.createPrinterJob();
+
+        if (job != null) {
+            // 弹出系统标准的打印设置对话框（让用户选择打印机、页码等）
+            boolean proceed = job.showPrintDialog(rootContainer.getScene().getWindow());
+
+            if (proceed) {
+                // 核心逻辑：直接将 WebEngine 的内容发送给打印作业
+                // 这种方式会自动保留 HTML 的样式、字体和图片
+                engine.print(job);
+
+                // 结束作业
+                job.endJob();
+            }
+        } else {
+            showError("打印失败", "未检测到可用的打印机设备。");
+        }
+    }
+
+    //  关闭当前窗口
+    @FXML
+    private void handleClose() {
+        // 通过容器获取 Stage 并关闭
+        javafx.stage.Stage stage = (javafx.stage.Stage) rootContainer.getScene().getWindow();
+        stage.close();
     }
 }
