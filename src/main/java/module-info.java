@@ -11,6 +11,10 @@ module com.deepmind {
     requires flexmark.util.sequence;
     requires flexmark.util.html;
     requires flexmark.util.options;
+    requires java.desktop;
+    requires openhtmltopdf.pdfbox;
+    requires javafx.swing; // 必须添加，用于处理图片导出
+    requires org.apache.poi.ooxml; // Word 导出
 
     //允许 Gson 访问你的 util 包进行数据的序列化和反序列化
     opens com.deepmind.util to com.google.gson;

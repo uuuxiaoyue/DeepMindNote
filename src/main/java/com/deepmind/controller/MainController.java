@@ -10,6 +10,7 @@ import javafx.scene.web.WebView;
 import java.io.IOException;
 import java.util.List;
 
+
 public class MainController {
 
     // --- 核心编辑区 ---
@@ -292,7 +293,6 @@ public class MainController {
         });
     }
 
-    // 注意：handleToggleMenu 方法已删除
 
     @FXML
     private void handleToggleSidebar() {
@@ -363,27 +363,29 @@ public class MainController {
     }
 
     private String buildHtml(String bodyContent, boolean isDarkMode) {
-        // 定义颜色 (与 style.css 对应)
+        // 定义颜色
         String bgColor = isDarkMode ? "#1e1f22" : "#ffffff";
         String textColor = isDarkMode ? "#bcbec4" : "#212529";
         String linkColor = isDarkMode ? "#589df6" : "#007bff";
         String codeBg = isDarkMode ? "#2b2d30" : "#f8f9fa";
 
-        return "<!DOCTYPE html>" +
-                "<html>" +
+        // 严谨的 XHTML 格式头部
+        return "<html xmlns='http://www.w3.org/1999/xhtml'>" +
                 "<head>" +
+                "<title>Note Export</title>" +
+                "<meta charset='UTF-8' />" + // 必须自闭合
                 "<style>" +
                 "body { " +
-                "   font-family: 'Segoe UI', sans-serif; " +
+                "   font-family: 'Microsoft YaHei', sans-serif; " + // 必须包含 PDF 注入的字体名
                 "   background-color: " + bgColor + "; " +
                 "   color: " + textColor + "; " +
                 "   padding: 20px; " +
                 "   line-height: 1.6; " +
                 "} " +
                 "a { color: " + linkColor + "; text-decoration: none; } " +
-                "code { " +
+                "pre, code { " +
                 "   background-color: " + codeBg + "; " +
-                "   padding: 2px 4px; " +
+                "   padding: 5px; " +
                 "   border-radius: 4px; " +
                 "   font-family: 'Consolas', monospace; " +
                 "} " +
@@ -423,7 +425,7 @@ public class MainController {
             if (all.isEmpty()) return;
             String randomTitle = all.get((int) (Math.random() * all.size()));
             NoteMetadata meta = FileUtil.readMetadata(randomTitle);
-            if ("😫 压力山大".equals(meta.lastMood)) {
+            if ("😫 烧脑痛苦".equals(meta.lastMood)) {
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("复习提醒");
                 alert.setHeaderText("你之前记录这篇笔记时感到很辛苦...");
@@ -563,6 +565,161 @@ public class MainController {
         }
     }
 
+    /**
+     * 处理外部文件导入
+     */
+    @FXML
+    private void handleImport() {
+        javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
+        fileChooser.setTitle("导入笔记");
+        // 设置支持的格式过滤器
+        fileChooser.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("支持的文本", "*.md", "*.txt"),
+                new javafx.stage.FileChooser.ExtensionFilter("所有文件", "*.*")
+        );
 
+        java.io.File selectedFile = fileChooser.showOpenDialog(rootContainer.getScene().getWindow());
+        if (selectedFile != null) {
+            try {
+                // 调用 FileUtil 读取外部文件内容
+                String content = FileUtil.readFromExternal(selectedFile);
+                editorArea.setText(content);
+                // 导入后可以默认设置当前标题为空，强制用户保存时起新名，或根据文件名自动设置
+                currentNoteTitle = "";
+                handleEditMode(); // 切换到编辑模式
+            } catch (IOException e) {
+                showError("导入失败", "无法读取文件: " + e.getMessage());
+            }
+        }
+    }
 
+    private void showError(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
+    // --- 导出逻辑 (MainController.java) ---
+
+    /**
+     * 核心通用方法：获取用户保存路径
+     */
+    private java.io.File getSaveFile(String title, String description, String extension) {
+        javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
+        fileChooser.setTitle(title);
+        // 设置默认文件名：如果当前有笔记标题则使用，否则用“未命名笔记”
+        String baseName = (currentNoteTitle == null || currentNoteTitle.isEmpty()) ? "未命名笔记" : currentNoteTitle;
+        fileChooser.setInitialFileName(baseName);
+        fileChooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(description, extension));
+        return fileChooser.showSaveDialog(rootContainer.getScene().getWindow());
+    }
+
+    @FXML
+    private void handleExportMarkdown() {
+        java.io.File file = getSaveFile("导出 Markdown", "Markdown (.md)", "*.md");
+        if (file != null) {
+            try {
+                // 修正：调用统一的外部保存方法
+                FileUtil.writeToExternal(file, editorArea.getText());
+            } catch (IOException e) {
+                showError("保存失败", e.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    private void handleExportPDF() {
+        java.io.File file = getSaveFile("导出 PDF", "PDF (.pdf)", "*.pdf");
+        if (file != null) {
+            try { exportAsPdf(file); }
+            catch (Exception e) { showError("PDF 导出失败", e.getMessage()); }
+        }
+    }
+
+    @FXML
+    private void handleExportWord() {
+        java.io.File file = getSaveFile("导出 Word", "Word (.docx)", "*.docx");
+        if (file != null) {
+            try { exportAsDocx(file); }
+            catch (Exception e) { showError("Word 导出失败", e.getMessage()); }
+        }
+    }
+
+    @FXML
+    private void handleExportHTMLFull() {
+        java.io.File file = getSaveFile("导出带样式网页", "HTML (.html)", "*.html");
+        if (file != null) {
+            try {
+                // 使用现有渲染逻辑
+                String fullHtml = buildHtml(MarkdownParser.parse(editorArea.getText()), false);
+                FileUtil.writeToExternal(file, fullHtml);
+            } catch (IOException e) { showError("HTML 导出失败", e.getMessage()); }
+        }
+    }
+
+    @FXML
+    private void handleExportHTMLRaw() {
+        java.io.File file = getSaveFile("导出纯净网页", "HTML (.html)", "*.html");
+        if (file != null) {
+            try {
+                // 只取解析后的 Body 部分
+                String rawHtml = MarkdownParser.parse(editorArea.getText());
+                FileUtil.writeToExternal(file, rawHtml);
+            } catch (IOException e) { showError("HTML 导出失败", e.getMessage()); }
+        }
+    }
+
+    @FXML
+    private void handleExportImage() {
+        java.io.File file = getSaveFile("导出图片", "图片 (.png)", "*.png");
+        if (file != null) {
+            try { exportAsImage(file); }
+            catch (IOException e) { showError("图片生成失败", e.getMessage()); }
+        }
+    }
+
+// --- 导出底层的私有实现 ---
+
+    private void exportAsPdf(java.io.File file) throws Exception {
+        // 1. 调用 Parser 获取纯 HTML 片段
+        String htmlFragment = MarkdownParser.parse(editorArea.getText());
+
+        // 2. 使用 buildHtml 包装成标准的、唯一的 XHTML 完整文档
+        String fullXhtml = buildHtml(htmlFragment, false);
+
+        try (java.io.OutputStream os = new java.io.FileOutputStream(file)) {
+            com.openhtmltopdf.pdfboxout.PdfRendererBuilder builder = new com.openhtmltopdf.pdfboxout.PdfRendererBuilder();
+
+            // 3. 注入中文字体（确保路径正确）
+            java.io.File fontFile = new java.io.File("C:/Windows/Fonts/msyh.ttc");
+            if (fontFile.exists()) {
+                builder.useFont(fontFile, "Microsoft YaHei");
+            }
+
+            builder.withHtmlContent(fullXhtml, "/");
+            builder.toStream(os);
+            builder.run();
+        }
+    }
+
+    private void exportAsDocx(java.io.File file) throws Exception {
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument doc = new org.apache.poi.xwpf.usermodel.XWPFDocument()) {
+            org.apache.poi.xwpf.usermodel.XWPFParagraph p = doc.createParagraph();
+            org.apache.poi.xwpf.usermodel.XWPFRun run = p.createRun();
+            run.setText(editorArea.getText());
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) {
+                doc.write(out);
+            }
+        }
+    }
+
+    private void exportAsImage(java.io.File file) throws IOException {
+        if (!webView.isVisible()) {
+            updatePreview(); // 确保 WebView 已渲染
+        }
+        javafx.scene.image.WritableImage image = webView.snapshot(null, null);
+        java.awt.image.BufferedImage bufferedImage = javafx.embed.swing.SwingFXUtils.fromFXImage(image, null);
+        javax.imageio.ImageIO.write(bufferedImage, "png", file);
+    }
 }

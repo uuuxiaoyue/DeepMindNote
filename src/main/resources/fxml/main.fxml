@@ -40,9 +40,19 @@
                         <MenuItem text="在侧边栏中显示"/>
                         <MenuItem text="删除..."/>
                         <SeparatorMenuItem />
-                        <MenuItem text="导入..."/>
-                        <Menu text="导出"/>
-                        <MenuItem text="打印..." accelerator="Alt+Shift+P"/>
+                        <MenuItem text="导入..." accelerator="Ctrl+I" onAction="#handleImport"/>
+                        <Menu text="导出">
+                            <items>
+                                <MenuItem text="Markdown (.md)" onAction="#handleExportMarkdown" />
+                                <MenuItem text="PDF 文档 (.pdf)" onAction="#handleExportPDF" />
+                                <MenuItem text="Word 文档 (.docx)" onAction="#handleExportWord" />
+                                <SeparatorMenuItem />
+                                <MenuItem text="网页 (带样式 .html)" onAction="#handleExportHTMLFull" />
+                                <MenuItem text="网页 (纯净版 .html)" onAction="#handleExportHTMLRaw" />
+                                <SeparatorMenuItem />
+                                <MenuItem text="长图分享 (.png)" onAction="#handleExportImage" />
+                            </items>
+                        </Menu>                        <MenuItem text="打印..." accelerator="Alt+Shift+P"/>
                         <SeparatorMenuItem />
                         <MenuItem text="偏好设置..." accelerator="Ctrl+,"/>
                         <SeparatorMenuItem />

@@ -57,4 +57,18 @@ public class FileUtil {
             return new NoteMetadata();
         }
     }
+
+    /**
+     * 从外部文件读取内容（用于导入）
+     */
+    public static String readFromExternal(java.io.File file) throws IOException {
+        return java.nio.file.Files.readString(file.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 将内容写入外部文件（用于导出 Markdown 和 HTML）
+     */
+    public static void writeToExternal(java.io.File file, String content) throws IOException {
+        java.nio.file.Files.writeString(file.toPath(), content, java.nio.charset.StandardCharsets.UTF_8);
+    }
 }
