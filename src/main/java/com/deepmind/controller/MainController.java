@@ -6,6 +6,7 @@ import com.deepmind.util.NoteMetadata;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import java.io.IOException;
@@ -39,6 +40,14 @@ public class MainController {
     // --- 状态变量 ---
     private String currentNoteTitle = "";
     private double lastDividerPosition = 0.2;
+
+    //关于查找和搜索
+    private int lastSearchIndex = 0;
+    private String lastSearchText = "";
+    @FXML private VBox findReplacePane;
+    @FXML private HBox replaceBox;
+    @FXML private TextField findInputField;
+    @FXML private TextField replaceInputField;;
 
     @FXML
     public void initialize() {
@@ -336,8 +345,27 @@ public class MainController {
 
     @FXML
     private void handleEditMode() {
-        editorArea.setVisible(true);
-        webView.setVisible(false);
+        // 调试日志，方便你观察是否触发了方法
+        System.out.println("当前编辑区状态: TextArea=" + editorArea.isVisible() + ", WebView=" + webView.isVisible());
+
+        if (editorArea.isVisible()) {
+            // --- 切换到预览模式 ---
+            updatePreview(); // 先渲染内容
+            editorArea.setVisible(false);
+            editorArea.setManaged(false); // 这一行很重要：让它不占用布局空间
+
+            webView.setVisible(true);
+            webView.setManaged(true);
+            webView.requestFocus();
+        } else {
+            // --- 切换到编辑模式 ---
+            webView.setVisible(false);
+            webView.setManaged(false);
+
+            editorArea.setVisible(true);
+            editorArea.setManaged(true);
+            editorArea.requestFocus(); // 回到编辑模式必须强行拿回焦点
+        }
     }
 
     @FXML
@@ -902,4 +930,142 @@ public class MainController {
         javafx.stage.Stage stage = (javafx.stage.Stage) rootContainer.getScene().getWindow();
         stage.close();
     }
+
+    // --- 编辑菜单功能实现 ---
+
+    /**
+     * 撤销操作
+     * TextArea 内部维护了一个修改历史栈
+     */
+    @FXML
+    private void handleUndo() {
+        editorArea.requestFocus(); // 确保焦点在编辑器
+        if (editorArea.isUndoable()) {
+            editorArea.undo();
+        }
+    }
+
+    /**
+     * 重做操作
+     */
+    @FXML
+    private void handleRedo() {
+        editorArea.requestFocus();
+        if (editorArea.isRedoable()) {
+            editorArea.redo();
+        }
+    }
+
+    /**
+     * 剪切操作
+     * 将选中的内容移动到系统剪贴板
+     */
+    @FXML
+    private void handleCut() {
+        editorArea.requestFocus();
+        editorArea.cut();
+    }
+
+    /**
+     * 复制操作
+     * 将选中的内容拷贝到系统剪贴板
+     */
+    @FXML
+    private void handleCopy() {
+        editorArea.requestFocus();
+        editorArea.copy();
+    }
+
+    /**
+     * 粘贴操作
+     * 从系统剪贴板读取内容并插入到光标位置
+     */
+    @FXML
+    private void handlePaste() {
+        editorArea.requestFocus();
+        editorArea.paste();
+    }
+
+    // 菜单点击“查找” (Ctrl+F) 触发
+    @FXML
+    private void handleFind() {
+        findReplacePane.setVisible(true);
+        findReplacePane.setManaged(true);
+        replaceBox.setVisible(false); // 查找模式下隐藏替换输入框
+        findInputField.requestFocus();
+        // 如果有选中文本，自动填入查找框
+        String selected = editorArea.getSelectedText();
+        if (!selected.isEmpty()) {
+            findInputField.setText(selected);
+        }
+    }
+
+    // 菜单点击“替换” (Ctrl+H) 触发
+    @FXML
+    private void handleReplace() {
+        findReplacePane.setVisible(true);
+        findReplacePane.setManaged(true);
+        replaceBox.setVisible(true);  // 替换模式下显示替换输入框
+        findInputField.requestFocus();
+    }
+
+    // 查找下一个 (↓ 按钮触发)
+    @FXML
+    private void findNext() {
+        String query = findInputField.getText();
+        if (query == null || query.isEmpty()) return;
+
+        String content = editorArea.getText();
+        int index = content.indexOf(query, lastSearchIndex);
+
+        if (index != -1) {
+            editorArea.requestFocus();
+            editorArea.selectRange(index, index + query.length());
+            lastSearchIndex = index + query.length();
+        } else {
+            // 回滚到开头循环查找
+            lastSearchIndex = 0;
+            int retry = content.indexOf(query, 0);
+            if (retry != -1) {
+                editorArea.requestFocus();
+                editorArea.selectRange(retry, retry + query.length());
+                lastSearchIndex = retry + query.length();
+            }
+        }
+    }
+
+    // 5. 全部替换 (面板内“全部”按钮触发)
+    @FXML
+    private void handleReplaceAll() {
+        String query = findInputField.getText();
+        String target = replaceInputField.getText();
+        if (query == null || query.isEmpty()) return;
+
+        String content = editorArea.getText();
+        // 使用 replace 方法替换所有匹配项
+        editorArea.setText(content.replace(query, target));
+    }
+
+    // 替换当前 (面板内“替换”按钮触发)
+    @FXML
+    private void handleReplaceSingle() {
+        String query = findInputField.getText();
+        String target = replaceInputField.getText();
+
+        // 如果当前选中的正是查找的内容，执行替换
+        if (editorArea.getSelectedText().equals(query)) {
+            editorArea.replaceSelection(target);
+            findNext(); // 自动找下一个
+        } else {
+            findNext(); // 否则先定位到下一个匹配项
+        }
+    }
+
+    @FXML
+    private void closeFindPane() {
+        findReplacePane.setVisible(false);
+        findReplacePane.setManaged(false);
+        editorArea.requestFocus();
+    }
+
 }

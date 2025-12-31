@@ -67,15 +67,15 @@
                 </Menu>
                 <Menu text="编辑(E)">
                     <items>
-                        <MenuItem text="撤销" accelerator="Ctrl+Z"/>
-                        <MenuItem text="重做" accelerator="Ctrl+Y"/>
+                        <MenuItem text="撤销" accelerator="Ctrl+Z" onAction="#handleUndo"/>
+                        <MenuItem text="重做" accelerator="Ctrl+Y" onAction="#handleRedo"/>
                         <SeparatorMenuItem />
-                        <MenuItem text="剪切" accelerator="Ctrl+X"/>
-                        <MenuItem text="复制" accelerator="Ctrl+C"/>
-                        <MenuItem text="粘贴" accelerator="Ctrl+V"/>
+                        <MenuItem text="剪切" accelerator="Ctrl+X" onAction="#handleCut"/>
+                        <MenuItem text="复制" accelerator="Ctrl+C" onAction="#handleCopy"/>
+                        <MenuItem text="粘贴" accelerator="Ctrl+V" onAction="#handlePaste"/>
                         <SeparatorMenuItem />
-                        <MenuItem text="查找" accelerator="Ctrl+F"/>
-                        <MenuItem text="替换" accelerator="Ctrl+H"/>
+                        <MenuItem text="查找" accelerator="Ctrl+F" onAction="#handleFind"/>
+                        <MenuItem text="替换" accelerator="Ctrl+H" onAction="#handleReplace"/>
                     </items>
                 </Menu>
 
@@ -144,8 +144,27 @@
 
             <VBox spacing="10" style="-fx-background-color: -color-bg-base;">
                 <StackPane VBox.vgrow="ALWAYS">
-                    <TextArea fx:id="editorArea" wrapText="true" />
-                    <WebView fx:id="webView" visible="false" />
+                    <TextArea fx:id="editorArea" wrapText="true" visible="false" managed="false" />
+                    <WebView fx:id="webView" visible="true" managed="true" />
+
+                    <VBox fx:id="findReplacePane" visible="false" managed="false"
+                          StackPane.alignment="TOP_RIGHT" maxWidth="350" maxHeight="110"
+                          style="-fx-background-color: white; -fx-background-radius: 8; -fx-border-color: #ddd; -fx-border-radius: 8; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 10, 0, 0, 5); -fx-padding: 10;">
+
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <TextField fx:id="findInputField" promptText="查找..." HBox.hgrow="ALWAYS"
+                                       style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;"/>
+                            <Button text="↓" onAction="#findNext" styleClass="status-btn" />
+                            <Button text="✕" onAction="#closeFindPane" style="-fx-background-color: transparent; -fx-text-fill: #999; -fx-cursor: hand;"/>
+                        </HBox>
+
+                        <HBox fx:id="replaceBox" spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 8 0 0 0;">
+                            <TextField fx:id="replaceInputField" promptText="替换为..." HBox.hgrow="ALWAYS"
+                                       style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;"/>
+                            <Button text="替换" onAction="#handleReplaceSingle" styleClass="status-btn" style="-fx-font-size: 11px;"/>
+                            <Button text="全部" onAction="#handleReplaceAll" styleClass="status-btn" style="-fx-font-size: 11px;"/>
+                        </HBox>
+                    </VBox>
                 </StackPane>
 
                 <HBox alignment="CENTER_LEFT" spacing="10" styleClass="status-bar">
