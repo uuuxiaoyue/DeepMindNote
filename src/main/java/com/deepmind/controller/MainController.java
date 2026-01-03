@@ -64,8 +64,8 @@ public class MainController {
         showRandomReview();
         showWelcomePage();
 
-        // === 初始化自定义右键菜单 ===
-        initContextMenu();
+        initContextMenu();         // 编辑区的右键菜单
+        initFileTreeContextMenu(); // 文件树的右键菜单
     }
 
     /**
@@ -166,21 +166,16 @@ public class MainController {
 
     @FXML
     private void handleNewNote() {
-        // 1. 智能判断分类前缀
+        // 1. 智能判断分类前缀 (保留你原有的逻辑)
         TreeItem<String> selected = fileTree.getSelectionModel().getSelectedItem();
-        String categoryPrefix = "未分类_";
+        String categoryPrefix = ""; // 默认改为空字符串，表示根目录
 
         if (selected != null) {
             String val = selected.getValue();
-
-            // 判断当前选中项是“文件夹”还是“笔记”
-            // 逻辑：如果它对应的 .md 文件存在，那它就是笔记，我们要找它的爸爸（父分类）
-            // 如果不存在，那它自己就是分类文件夹
             java.io.File f = new java.io.File("notes/" + val + ".md");
 
             if (f.exists() && f.isFile()) {
                 // 选中了笔记 -> 取父节点名字作为分类前缀
-                // (排除 Root 节点)
                 if (selected.getParent() != null && !selected.getParent().getValue().equals("Root")) {
                     categoryPrefix = selected.getParent().getValue() + "_";
                 }
@@ -192,34 +187,48 @@ public class MainController {
             }
         }
 
-        // 2. 自动生成不重复的文件名
-        String baseName = "新笔记";
-        String finalName = baseName;
-        int counter = 1;
+        // 2. 弹出对话框让用户命名 (替换掉原本自动生成的计数逻辑)
+        String displayPrefix = categoryPrefix.isEmpty() ? "根目录" : categoryPrefix.replace("_", "");
+        TextInputDialog dialog = new TextInputDialog("新笔记");
+        dialog.setTitle("新建笔记");
+        dialog.setHeaderText("创建位置: " + displayPrefix);
+        dialog.setContentText("请输入笔记名称:");
 
-        try {
-            List<String> existingFiles = FileUtil.listAllNotes();
-            // 循环检查：如果 "新建文件夹_新笔记" 存在，就试 "新建文件夹_新笔记1"...
-            while (existingFiles.contains(categoryPrefix + finalName)) {
-                finalName = baseName + counter;
-                counter++;
+        // 这一步是为了在 lambda 表达式中使用
+        final String finalPrefix = categoryPrefix;
+
+        dialog.showAndWait().ifPresent(fileName -> {
+            String pureName = fileName.trim();
+            if (pureName.isEmpty()) return;
+
+            // 检查文件名是否包含非法字符（如下划线，因为它会干扰分类逻辑）
+            if (pureName.contains("_")) {
+                showError("命名无效", "笔记名称中请不要包含下划线 '_'。");
+                return;
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return;
-        }
 
-        String fullFileName = categoryPrefix + finalName;
-        String initialContent = "# " + finalName;
+            String fullFileName = finalPrefix + pureName;
+            String initialContent = "# " + pureName;
 
-        // 3. 创建并跳转
-        try {
-            FileUtil.save(fullFileName, initialContent);
-            refreshFileTree();
-            selectAndFocusNewNote(fullFileName, finalName);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+            try {
+                // 检查重名
+                List<String> existingFiles = FileUtil.listAllNotes();
+                if (existingFiles.contains(fullFileName)) {
+                    showError("创建失败", "当前分类下已存在同名笔记。");
+                    return;
+                }
+
+                // 3. 执行创建并跳转 (保留你原有的刷新和聚焦逻辑)
+                FileUtil.save(fullFileName, initialContent);
+                refreshFileTree();
+
+                // 注意：这里确保调用你原有的 selectAndFocusNewNote 方法
+                selectAndFocusNewNote(fullFileName, pureName);
+
+            } catch (IOException e) {
+                showError("创建失败", e.getMessage());
+            }
+        });
     }
 
     /**
@@ -564,6 +573,169 @@ public class MainController {
         editorArea.setContextMenu(contextMenu);
     }
 
+
+    /**
+     * 专门为左侧 TreeView 设置右键菜单
+     */
+    private void initFileTreeContextMenu() {
+        ContextMenu fileContextMenu = new ContextMenu();
+
+        MenuItem renameItem = new MenuItem("重命名");
+        renameItem.setOnAction(e -> handleRenameNote());
+
+        MenuItem moveItem = new MenuItem("移动到文件夹...");
+        moveItem.setOnAction(e -> handleMoveNote()); // 绑定上面新写的函数
+
+        MenuItem deleteItem = new MenuItem("删除笔记");
+        deleteItem.setStyle("-fx-text-fill: red;");
+        deleteItem.setOnAction(e -> handleDeleteNote());
+
+        fileContextMenu.getItems().addAll(renameItem, moveItem, new SeparatorMenuItem(), deleteItem);
+        fileTree.setContextMenu(fileContextMenu);
+    }
+
+    /**
+     * 整合后的重命名逻辑
+     */
+    @FXML
+    private void handleRenameNote() {
+        TreeItem<String> selectedItem = fileTree.getSelectionModel().getSelectedItem();
+        if (selectedItem == null || selectedItem.getParent() == null) return;
+
+        String oldTitle = selectedItem.getValue();
+
+        TextInputDialog dialog = new TextInputDialog(oldTitle);
+        dialog.setTitle("重命名笔记");
+        dialog.setHeaderText("注意：修改下划线前的文字将改变所属文件夹");
+        dialog.setContentText("请输入新名称:");
+
+        dialog.showAndWait().ifPresent(newTitle -> {
+            if (!newTitle.isEmpty() && !newTitle.equals(oldTitle)) {
+                try {
+                    // 1. 物理重命名 (FileUtil 会处理 .md 和 .json)
+                    FileUtil.rename(oldTitle, newTitle);
+
+                    // 2. 更新当前变量
+                    if (currentNoteTitle.equals(oldTitle)) {
+                        currentNoteTitle = newTitle;
+                    }
+
+                    // 3. 关键修复：直接刷新整棵树！
+                    refreshFileTree();
+
+                } catch (IOException e) {
+                    showError("重命名失败", "可能是名称冲突或文件被占用。");
+                }
+            }
+        });
+    }
+
+    /**
+     * 移动笔记：实际上是修改文件名的前缀（虚拟文件夹）
+     */
+    @FXML
+    private void handleMoveNote() {
+        // 1. 获取当前选中的 TreeItem
+        TreeItem<String> selectedItem = fileTree.getSelectionModel().getSelectedItem();
+
+        // 如果选中的是文件夹根节点或为空，则返回
+        if (selectedItem == null || selectedItem.getParent() == null || selectedItem.getParent() == fileTree.getRoot()) {
+            return;
+        }
+
+        String currentFullName = selectedItem.getValue();
+        String currentFolder = "";
+        String pureFileName;
+
+        // 2. 解析前缀：例如 "学习_Java笔记" -> 文件夹: 学习, 文件名: Java笔记
+        if (currentFullName.contains("_")) {
+            int index = currentFullName.indexOf("_");
+            currentFolder = currentFullName.substring(0, index);
+            pureFileName = currentFullName.substring(index + 1);
+        } else {
+            pureFileName = currentFullName;
+        }
+
+        // 3. 弹出对话框
+        TextInputDialog dialog = new TextInputDialog(currentFolder);
+        dialog.setTitle("移动笔记分类");
+        dialog.setHeaderText("移动笔记: " + pureFileName);
+        dialog.setContentText("请输入新的分类名称 (留空则移出文件夹):");
+
+        dialog.showAndWait().ifPresent(newFolderName -> {
+            String newTitle;
+            String trimmedFolder = newFolderName.trim();
+
+            // 根据输入拼接新名称
+            if (trimmedFolder.isEmpty()) {
+                newTitle = pureFileName; // 变为根目录文件
+            } else {
+                newTitle = trimmedFolder + "_" + pureFileName;
+            }
+
+            if (!newTitle.equals(currentFullName)) {
+                try {
+                    // 4. 调用你已经改好的 FileUtil.rename
+                    FileUtil.rename(currentFullName, newTitle);
+
+                    // 5. 同步当前编辑状态
+                    if (currentNoteTitle.equals(currentFullName)) {
+                        currentNoteTitle = newTitle;
+                    }
+
+                    // 6. 核心：必须调用 refreshFileTree() 重新构建整个左侧树
+                    refreshFileTree();
+
+                } catch (IOException e) {
+                    showError("移动失败", "无法移动笔记，请检查名称是否合法或已存在。");
+                }
+            }
+        });
+    }
+
+    /**
+     * 整合后的删除逻辑
+     */
+    @FXML
+    private void handleDeleteNote() {
+        TreeItem<String> selectedItem = fileTree.getSelectionModel().getSelectedItem();
+        if (selectedItem == null || selectedItem.getParent() == null) return;
+
+        String title = selectedItem.getValue();
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "确定要删除笔记 [" + title + "] 吗？", ButtonType.YES, ButtonType.NO);
+        confirm.setTitle("删除确认");
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                try {
+                    FileUtil.delete(title);
+                    selectedItem.getParent().getChildren().remove(selectedItem);
+
+                    // 如果删除的是当前编辑的笔记，清空内容
+                    if (currentNoteTitle.equals(title)) {
+                        editorArea.clear();
+                        webView.getEngine().loadContent("");
+                        currentNoteTitle = "";
+                    }
+                } catch (IOException e) {
+                    showError("删除失败", "文件删除时出错。");
+                }
+            }
+        });
+    }
+
+    /**
+     * 抽取出的统一错误提示
+     */
+    private void showError(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
     /**
      * 切换右侧大纲栏显示/隐藏
      * 逻辑：真正地从 SplitPane 中移除组件，这样中间区域才会变宽
@@ -698,12 +870,12 @@ public class MainController {
         }
     }
 
-    private void showError(String title, String content) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setContentText(content);
-        alert.showAndWait();
-    }
+//    private void showError(String title, String content) {
+//        Alert alert = new Alert(Alert.AlertType.ERROR);
+//        alert.setTitle(title);
+//        alert.setContentText(content);
+//        alert.showAndWait();
+//    }
 
     // --- 导出逻辑 (MainController.java) ---
 
@@ -1188,7 +1360,7 @@ public class MainController {
 
     @FXML private void handleUnorderedList() { insertAtLineStart("-"); }
     @FXML private void handleOrderedList() { insertAtLineStart("1."); }
-    @FXML private void handleTaskList() { insertAtLineStart("- [ ]"); }
+//    @FXML private void handleTaskList() { insertAtLineStart("- [ ]"); }
     @FXML private void handleBlockquote() { insertAtLineStart(">"); }
 
     // 标题

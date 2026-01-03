@@ -32,7 +32,7 @@ public class MarkdownParser {
         // 这里定义的 CSS 会直接作用于 WebView 渲染的内容
         String internalCss =
                 "<style>" +
-                        "  body { font-family: 'Microsoft YaHei', sans-serif; font-size: 16px; line-height: 1.6; color: #333; }" +
+//                        "  body { font-family: 'Microsoft YaHei', sans-serif; font-size: 16px; line-height: 1.6; color: #333; }" +
                         "  i, em { " +
                         "    font-style: italic !important; " +
                         "    display: inline-block; " +

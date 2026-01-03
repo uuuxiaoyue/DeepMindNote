@@ -71,4 +71,25 @@ public class FileUtil {
     public static void writeToExternal(java.io.File file, String content) throws IOException {
         java.nio.file.Files.writeString(file.toPath(), content, java.nio.charset.StandardCharsets.UTF_8);
     }
+
+    public static void rename(String oldTitle, String newTitle) throws IOException {
+        Path source = Paths.get(BASE_DIR, oldTitle + ".md");
+        Path target = Paths.get(BASE_DIR, newTitle + ".md");
+
+        // 检查目标文件是否已存在
+        if (Files.exists(target)) {
+            throw new IOException("目标文件名已存在");
+        }
+
+        // 移动主文件
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+
+        // 移动元数据文件 (json)
+        Path metaSource = Paths.get(BASE_DIR, oldTitle + ".json");
+        Path metaTarget = Paths.get(BASE_DIR, newTitle + ".json");
+        if (Files.exists(metaSource)) {
+            Files.move(metaSource, metaTarget, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
 }

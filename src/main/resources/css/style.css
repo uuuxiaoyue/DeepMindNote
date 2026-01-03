@@ -307,12 +307,17 @@
 
 /*i, em {*/
 /*    font-style: italic !important;*/
-/*    -fx-font-style: italic;*/
-/*    color: #2c3e50;*/
+/*    display: inline-block;  */
+/*    transform: skewX(-15deg);   // 物理拉伸实现倾斜*/
+/*    margin-right: 2px; */
 /*}*/
 
 /*!* 删除线灰色且有横线 *!*/
 /*del {*/
 /*    text-decoration: line-through;*/
-/*    color: #888888;*/
+/*    color: #a0a0a0;*/
+/*}*/
+
+/*mark { */
+/*    background-color: #ffeb3b; color: black; padding: 2px; border-radius: 3px;*/
 /*}*/
