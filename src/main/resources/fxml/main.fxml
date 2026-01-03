@@ -80,11 +80,35 @@
                 </Menu>
 
                 <Menu text="段落(P)">
-                    <items><MenuItem text="标题1"/><MenuItem text="标题2"/></items>
+                    <items>
+                        <MenuItem text="无序列表" onAction="#handleUnorderedList" accelerator="Ctrl+U"/>
+                        <MenuItem text="有序列表" onAction="#handleOrderedList" accelerator="Ctrl+O"/>
+<!--                        <MenuItem text="任务列表" onAction="#handleTaskList" accelerator="Ctrl+T"/>-->
+                        <SeparatorMenuItem />
+                        <Menu text="标题级别">
+                            <items>
+                                <MenuItem text="一级标题 (H1)" onAction="#handleH1" accelerator="Ctrl+1"/>
+                                <MenuItem text="二级标题 (H2)" onAction="#handleH2" accelerator="Ctrl+2"/>
+                                <MenuItem text="三级标题 (H3)" onAction="#handleH3" accelerator="Ctrl+3"/>
+                                <MenuItem text="四级标题 (H4)" onAction="#handleH4" accelerator="Ctrl+4"/>
+                                <MenuItem text="五级标题 (H5)" onAction="#handleH5" accelerator="Ctrl+5"/>
+                                <MenuItem text="六级标题 (H6)" onAction="#handleH6" accelerator="Ctrl+6"/>
+                            </items>
+                        </Menu>
+                        <SeparatorMenuItem />
+                        <MenuItem text="引用块" onAction="#handleBlockquote" accelerator="Ctrl+Q"/>
+                    </items>
                 </Menu>
+
                 <Menu text="格式(O)">
-                    <items><MenuItem text="加粗"/><MenuItem text="斜体"/></items>
+                    <items>
+                        <MenuItem text="加粗" onAction="#handleBold" accelerator="Ctrl+B"/>
+                        <MenuItem text="倾斜" onAction="#handleItalic" accelerator="Ctrl+I"/>
+                        <MenuItem text="删除线" onAction="#handleStrikethrough" accelerator="Ctrl+D"/>
+                        <MenuItem text="高亮" onAction="#handleHighlight" accelerator="Ctrl+H"/>
+                    </items>
                 </Menu>
+
                 <Menu text="视图(V)">
                     <items>
                         <MenuItem text="源代码模式" onAction="#handleEditMode"/>

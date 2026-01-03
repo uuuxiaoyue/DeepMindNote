@@ -304,3 +304,15 @@
     -fx-border-color: #5c5c5c;
     -fx-text-fill: #e0e0e0;
 }
+
+/*i, em {*/
+/*    font-style: italic !important;*/
+/*    -fx-font-style: italic;*/
+/*    color: #2c3e50;*/
+/*}*/
+
+/*!* 删除线灰色且有横线 *!*/
+/*del {*/
+/*    text-decoration: line-through;*/
+/*    color: #888888;*/
+/*}*/

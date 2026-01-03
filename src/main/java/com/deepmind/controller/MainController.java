@@ -64,6 +64,8 @@ public class MainController {
         showRandomReview();
         showWelcomePage();
 
+        // === 初始化自定义右键菜单 ===
+        initContextMenu();
     }
 
     /**
@@ -486,6 +488,80 @@ public class MainController {
                 }
             }
         });
+    }
+    /**
+     * 构建自定义右键菜单
+     * 注意：这会覆盖系统默认菜单，所以我们需要手动把 撤销/复制/粘贴 加回来
+     */
+    private void initContextMenu() {
+        // 1. 创建全新的右键菜单
+        ContextMenu contextMenu = new ContextMenu();
+
+        // 2. 基础编辑功能
+        MenuItem undoItem = new MenuItem("撤销");
+        undoItem.setOnAction(e -> editorArea.undo());
+
+        MenuItem redoItem = new MenuItem("重做");
+        redoItem.setOnAction(e -> editorArea.redo());
+
+        MenuItem cutItem = new MenuItem("剪切");
+        cutItem.setOnAction(e -> editorArea.cut());
+
+        MenuItem copyItem = new MenuItem("复制");
+        copyItem.setOnAction(e -> editorArea.copy());
+
+        MenuItem pasteItem = new MenuItem("粘贴");
+        pasteItem.setOnAction(e -> editorArea.paste());
+
+        MenuItem selectAllItem = new MenuItem("全选");
+        selectAllItem.setOnAction(e -> editorArea.selectAll());
+
+        // 3. 文本格式子菜单
+        Menu formatMenu = new Menu("文本格式");
+        MenuItem boldItem = new MenuItem("加粗");
+        boldItem.setOnAction(e -> handleBold());
+        MenuItem italicItem = new MenuItem("倾斜");
+        italicItem.setOnAction(e -> handleItalic());
+        MenuItem strikeItem = new MenuItem("删除线");
+        strikeItem.setOnAction(e -> handleStrikethrough());
+        MenuItem highlightItem = new MenuItem("高亮");
+        highlightItem.setOnAction(e -> handleHighlight());
+        formatMenu.getItems().addAll(boldItem, italicItem, strikeItem, highlightItem);
+
+        // 4. 段落设置子菜单
+        Menu paragraphMenu = new Menu("段落设置");
+        Menu headerMenu = new Menu("标题级别");
+        MenuItem h1 = new MenuItem("H1 一级标题"); h1.setOnAction(e -> handleH1());
+        MenuItem h2 = new MenuItem("H2 二级标题"); h2.setOnAction(e -> handleH2());
+        MenuItem h3 = new MenuItem("H3 三级标题"); h3.setOnAction(e -> handleH3());
+        MenuItem h4 = new MenuItem("H4 四级标题"); h3.setOnAction(e -> handleH4());
+        MenuItem h5 = new MenuItem("H5 五级标题"); h3.setOnAction(e -> handleH5());
+        MenuItem h6 = new MenuItem("H6 六级标题"); h3.setOnAction(e -> handleH6());
+
+        headerMenu.getItems().addAll(h1, h2, h3, h4, h5, h6);
+
+        MenuItem ulItem = new MenuItem("无序列表");
+        ulItem.setOnAction(e -> handleUnorderedList());
+        MenuItem olItem = new MenuItem("有序列表");
+        olItem.setOnAction(e -> handleOrderedList());
+        MenuItem quoteItem = new MenuItem("引用块");
+        quoteItem.setOnAction(e -> handleBlockquote());
+        paragraphMenu.getItems().addAll(headerMenu, new SeparatorMenuItem(), ulItem, olItem, quoteItem);
+
+        // 5. 将所有项添加到 ContextMenu (注意添加顺序)
+        contextMenu.getItems().addAll(
+                undoItem, redoItem,
+                new SeparatorMenuItem(),
+                cutItem, copyItem, pasteItem,
+                new SeparatorMenuItem(),
+                selectAllItem,
+                new SeparatorMenuItem(),
+                formatMenu,
+                paragraphMenu
+        );
+
+        // 6. 关键一步：绑定到编辑器
+        editorArea.setContextMenu(contextMenu);
     }
 
     /**
@@ -1068,4 +1144,58 @@ public class MainController {
         editorArea.requestFocus();
     }
 
+    // =====================================================
+    // 1. 文本操作辅助方法 (核心引擎)
+    // =====================================================
+
+    /**
+     * 辅助方法：在选中文本前后插入符号（用于加粗、高亮等）
+     */
+    private void wrapSelection(String prefix, String suffix) {
+        String selectedText = editorArea.getSelectedText();
+        // 如果没有选中文字，也可以直接插入占位符，这里简单处理为包裹空字符串
+        editorArea.replaceSelection(prefix + selectedText + suffix);
+        editorArea.requestFocus(); // 操作完保持焦点
+    }
+
+    /**
+     * 辅助方法：在当前行首插入符号（用于标题、列表）
+     */
+    private void insertAtLineStart(String prefix) {
+        int caretPos = editorArea.getCaretPosition();
+        String text = editorArea.getText();
+
+        // 向前查找最近的一个换行符，确定行首位置
+        // 如果 caretPos 是 0，lastIndexOf 返回 -1，结果正是 0 (正确)
+        int lineStart = text.lastIndexOf('\n', caretPos - 1) + 1;
+
+        editorArea.insertText(lineStart, prefix + " ");
+        editorArea.requestFocus();
+    }
+
+    // =====================================================
+    // 2. 格式功能实现 (对应菜单和右键)
+    // =====================================================
+
+    @FXML private void handleBold() { wrapSelection("**", "**"); }
+    @FXML private void handleItalic() { wrapSelection("*", "*"); }
+    @FXML private void handleStrikethrough() { wrapSelection("~~", "~~"); }
+    @FXML private void handleHighlight() { wrapSelection("==", "=="); }
+
+    // =====================================================
+    // 3. 段落功能实现 (对应菜单和右键)
+    // =====================================================
+
+    @FXML private void handleUnorderedList() { insertAtLineStart("-"); }
+    @FXML private void handleOrderedList() { insertAtLineStart("1."); }
+    @FXML private void handleTaskList() { insertAtLineStart("- [ ]"); }
+    @FXML private void handleBlockquote() { insertAtLineStart(">"); }
+
+    // 标题
+    @FXML private void handleH1() { insertAtLineStart("#"); }
+    @FXML private void handleH2() { insertAtLineStart("##"); }
+    @FXML private void handleH3() { insertAtLineStart("###"); }
+    @FXML private void handleH4() { insertAtLineStart("####"); }
+    @FXML private void handleH5() { insertAtLineStart("#####"); }
+    @FXML private void handleH6() { insertAtLineStart("######"); }
 }
