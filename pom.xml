@@ -48,7 +48,7 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-web</artifactId>
-            <version>17.0.2</version>
+            <version>21</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -70,7 +70,8 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-swing</artifactId>
-            <version>17.0.2</version> </dependency>
+            <version>21</version>
+        </dependency>
 
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>

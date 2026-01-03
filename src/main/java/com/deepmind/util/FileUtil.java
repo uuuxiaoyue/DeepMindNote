@@ -1,11 +1,14 @@
 package com.deepmind.util;
 
+import com.google.gson.Gson;
+
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.stream.Collectors;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder; // 建议用这个，可以格式化 JSON
 
 
 public class FileUtil {
@@ -91,5 +94,4 @@ public class FileUtil {
             Files.move(metaSource, metaTarget, StandardCopyOption.REPLACE_EXISTING);
         }
     }
-
 }

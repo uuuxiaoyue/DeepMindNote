@@ -207,6 +207,8 @@
     -fx-text-fill: -color-text-main;
     -fx-background-color: transparent;
     -fx-display-caret: true;
+    -fx-font-family: 'Consolas', 'Monospaced', 'Courier New';
+    -fx-font-size: 14px;
 }
 .text-area .content {
     -fx-background-color: -color-bg-base;
@@ -304,20 +306,3 @@
     -fx-border-color: #5c5c5c;
     -fx-text-fill: #e0e0e0;
 }
-
-/*i, em {*/
-/*    font-style: italic !important;*/
-/*    display: inline-block;  */
-/*    transform: skewX(-15deg);   // 物理拉伸实现倾斜*/
-/*    margin-right: 2px; */
-/*}*/
-
-/*!* 删除线灰色且有横线 *!*/
-/*del {*/
-/*    text-decoration: line-through;*/
-/*    color: #a0a0a0;*/
-/*}*/
-
-/*mark { */
-/*    background-color: #ffeb3b; color: black; padding: 2px; border-radius: 3px;*/
-/*}*/

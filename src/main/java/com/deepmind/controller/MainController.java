@@ -9,6 +9,8 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
+
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.TreeSet;
 
 
+@SuppressWarnings("ALL")
 public class MainController {
 
     // --- 核心编辑区 ---
@@ -45,11 +48,19 @@ public class MainController {
 
     //关于查找和搜索
     private int lastSearchIndex = 0;
-    private String lastSearchText = "";
     @FXML private VBox findReplacePane;
     @FXML private HBox replaceBox;
     @FXML private TextField findInputField;
     @FXML private TextField replaceInputField;
+
+    // 对应 FXML 中的 fx:id="recentFilesMenu"
+
+    // 常量定义
+
+    // 内存中维护的文件列表
+
+    // 获取系统的偏好设置节点 (会自动保存在注册表或系统特定位置)
+
 
     @FXML
     public void initialize() {
@@ -68,6 +79,10 @@ public class MainController {
 
         initContextMenu();         // 编辑区的右键菜单
         initFileTreeContextMenu(); // 文件树的右键菜单
+
+        setupTreeSelection();
+        setupDragAndDrop();
+        setupDualDragAndDrop();
     }
 
     /**
@@ -79,10 +94,6 @@ public class MainController {
         // 我们用一个列表来保存已创建的分类节点，避免重复
         java.util.Map<String, TreeItem<String>> categoryMap = new java.util.HashMap<>();
 
-        // 1. 先把我们想要的默认分类加上（可选）
-        // createCategoryNode("课程学习", root, categoryMap);
-        // createCategoryNode("个人项目", root, categoryMap);
-        // createCategoryNode("未分类", root, categoryMap);
 
         try {
             List<String> allFiles = FileUtil.listAllNotes();
@@ -126,21 +137,13 @@ public class MainController {
         fileTree.setShowRoot(false);
     }
 
-    /**
-     * 监听树的选择：如果是“真实笔记文件”，则加载内容
-     * 【修复】增加了文件存在性检查，防止点击空文件夹时报错
-     */
     private void setupTreeSelection() {
         fileTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null && newVal.isLeaf()) {
                 String fileName = newVal.getValue();
 
-                // 核心修复：检查文件是否真的存在
-                // 假设你的笔记存储在 "notes" 目录下，且后缀是 .md
-                // (根据你的 FileUtil 逻辑，这里可能需要调整路径，但通常是这样)
                 java.io.File f = new java.io.File("notes/" + fileName + ".md");
 
-                // 只有当它是一个真实存在的文件时，才去加载
                 if (f.exists() && f.isFile()) {
                     loadNoteContent(fileName);
                 } else {
@@ -391,16 +394,34 @@ public class MainController {
     private void updatePreview() {
         String mdContent = editorArea.getText();
         // 1. 解析 Markdown
-        String htmlBody = MarkdownParser.parse(mdContent);
+        String markdownHtml = MarkdownParser.parse(mdContent);
 
         // 2. 检查当前是否是暗色模式
         // (简单的判断方法：看 rootContainer 的样式类里有没有 theme-dark)
         boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
 
         // 3. 构建完整的 HTML，注入 CSS 样式
-        String html = buildHtml(htmlBody, isDark);
-
-        // 4. 加载
+        File notesDir = new File("notes/");
+        String baseUrl = notesDir.toURI().toString();
+        // 3. 拼接完整的 HTML 结构
+        String htmlContent = "<!DOCTYPE html>"
+                + "<html>"
+                + "<head>"
+                + "    <meta charset=\"UTF-8\">"
+                // 关键点：告诉 WebView 所有的相对路径(如 images/1.png) 都要去 baseUrl 下面找
+                + "    <base href=\"" + baseUrl + "\">"
+                + "    <style>"
+                + "        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }"
+                + "        /* 推荐：限制图片最大宽度，防止图片太大撑破屏幕 */"
+                + "        img { max-width: 100%; height: auto; }"
+                + "    </style>"
+                + "</head>"
+                + "<body>"
+                + markdownHtml
+                + "</body>"
+                + "</html>";
+        String html = buildHtml(htmlContent, isDark);
+        // 4. 加载内容
         webView.getEngine().loadContent(html);
     }
 
@@ -479,6 +500,188 @@ public class MainController {
         }
     }
 
+    /**
+     * 设置编辑器的图片拖拽功能
+     * 功能：拖入图片 -> 自动复制到 images 目录 -> 插入 Markdown 语法
+     */
+    private void setupDualDragAndDrop() {
+        // 1. 给 TextArea 设置拖拽
+        setupNodeDragHandlers(editorArea, true);
+
+        // 2. 给 WebView 设置拖拽 (关键：防止跳转)
+        setupNodeDragHandlers(webView, false);
+    }
+
+    /**
+     * 通用的节点拖拽处理器
+     * @param node 目标节点 (TextArea 或 WebView)
+     * @param isEditor 是否是编辑器 (如果是编辑器，插入光标处；如果是WebView，追加到文末)
+     */
+    /**
+     * 通用的节点拖拽处理器 (已更新：支持光标跟随)
+     */
+    private void setupNodeDragHandlers(javafx.scene.Node node, boolean isEditor) {
+        // --- 拖拽经过 (DragOver) ---
+        node.setOnDragOver(event -> {
+            if (event.getDragboard().hasFiles()) {
+                File file = event.getDragboard().getFiles().get(0);
+                if (isImageFile(file)) {
+                    event.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+
+                    // 【新增】如果是编辑器，强制光标跟随鼠标移动
+                    if (isEditor && node instanceof TextArea) {
+                        moveCaretToMouse((TextArea) node, event.getX(), event.getY());
+                        ((TextArea) node).requestFocus(); // 获取焦点，让光标闪烁可见
+                    }
+                }
+            }
+            event.consume();
+        });
+
+        // --- 拖拽释放 (DragDropped) ---
+        node.setOnDragDropped(event -> {
+            javafx.scene.input.Dragboard db = event.getDragboard();
+            boolean success = false;
+
+            if (db.hasFiles()) {
+                File sourceFile = db.getFiles().get(0);
+                if (isImageFile(sourceFile)) {
+                    String relativePath = saveImageToProject(sourceFile);
+                    if (relativePath != null) {
+                        String markdownImage = String.format("![%s](%s)", sourceFile.getName(), relativePath);
+
+                        // 此时光标已经在 DragOver 中移动到了正确位置，直接插入即可
+                        insertMarkdownText(markdownImage, isEditor);
+                        success = true;
+                    }
+                }
+            }
+            event.setDropCompleted(success);
+            event.consume();
+        });
+    }
+
+    /**
+     * 【核心算法】根据鼠标坐标移动光标
+     * 注意：这基于等宽字体计算，非等宽字体会有误差，但不会报错
+     */
+    private void moveCaretToMouse(TextArea area, double mouseX, double mouseY) {
+        // 1. 获取字体度量 (假设是等宽字体)
+        javafx.scene.text.Text helper = new javafx.scene.text.Text("W");
+        helper.setFont(area.getFont());
+        double lineHeight = helper.getLayoutBounds().getHeight(); // 单行高度
+        double charWidth = helper.getLayoutBounds().getWidth();   // 单字符宽度
+
+        // 2. 加上滚动条的偏移量 (TextArea 的内容可能被卷上去了)
+        double scrolledX = mouseX + area.getScrollLeft();
+        double scrolledY = mouseY + area.getScrollTop();
+
+        // 3. 简单的内边距修正 (TextArea 默认有一点 padding)
+        double paddingX = 5.0;
+        double paddingY = 5.0; // 视 CSS 而定，通常 5-7px
+
+        // 4. 计算行号和列号
+        int row = (int) ((scrolledY - paddingY) / lineHeight);
+        int col = (int) ((scrolledX - paddingX) / charWidth);
+
+        // 5. 将行列转换为文本索引 (Index)
+        // 这一步比较麻烦，因为要考虑每一行的实际长度
+        try {
+            String text = area.getText();
+            String[] lines = text.split("\n", -1); // -1 保留末尾空行
+
+            int targetIndex = 0;
+
+            // 限制行号不越界
+            if (row < 0) row = 0;
+            if (row >= lines.length) row = lines.length - 1;
+
+            // 累加目标行之前的字符数
+            for (int i = 0; i < row; i++) {
+                targetIndex += lines[i].length() + 1; // +1 是换行符
+            }
+
+            // 加上列偏移
+            int lineLen = lines[row].length();
+            if (col < 0) col = 0;
+            if (col > lineLen) col = lineLen; // 限制光标不能超过行尾
+
+            targetIndex += col;
+
+            // 6. 移动光标
+            area.positionCaret(targetIndex);
+
+        } catch (Exception e) {
+            // 计算出错时忽略，保持原位
+        }
+    }
+
+    /**
+     * 辅助方法：判断文件是否为图片
+     */
+    private boolean isImageFile(File file) {
+        String name = file.getName().toLowerCase();
+        return name.endsWith(".png") || name.endsWith(".jpg") ||
+                name.endsWith(".jpeg") || name.endsWith(".gif") ||
+                name.endsWith(".bmp") || name.endsWith(".webp");
+    }
+
+    /**
+     * 辅助方法：插入 Markdown 文本
+     */
+    private void insertMarkdownText(String text, boolean insertAtCursor) {
+        if (insertAtCursor) {
+            // 如果是拖入 TextArea，插入到光标位置
+            int caretPos = editorArea.getCaretPosition();
+            editorArea.insertText(caretPos, "\n" + text + "\n");
+        } else {
+            // 如果是拖入 WebView，因为无法获取具体的 HTML 对应位置，通常追加到文末
+            // 或者你可以选择插入到当前光标位置（即使拖到了 WebView 上）
+            editorArea.appendText("\n" + text + "\n");
+        }
+
+        // 强制触发一次 Markdown 重新渲染 (如果你的 TextProperty 监听器没触发的话)
+        // handleTextChanged();
+    }
+
+    /**
+     * 保存图片逻辑 (保持不变)
+     */
+
+
+    /**
+     * 将图片复制到项目的 images 文件夹中
+     *
+     * @return 返回相对路径 (用于 Markdown)
+     */
+    private String saveImageToProject(File sourceFile) {
+        try {
+            // 1. 确定存放图片的目录 (建议放在 notes/images 下)
+            File imageDir = new File("notes/images");
+            if (!imageDir.exists()) {
+                imageDir.mkdirs();
+            }
+
+            // 2. 生成新文件名 (防止重名覆盖，加个时间戳)
+            String extension = "";
+            int i = sourceFile.getName().lastIndexOf('.');
+            if (i > 0) {
+                extension = sourceFile.getName().substring(i);
+            }
+            String newFileName = System.currentTimeMillis() + extension;
+            File targetFile = new File(imageDir, newFileName);
+
+            // 3. 执行复制
+            java.nio.file.Files.copy(sourceFile.toPath(), targetFile.toPath());
+
+            // 4. 返回相对路径 (注意：Markdown 中路径分隔符最好用 /)
+            return "images/" + newFileName;
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null; // 或者返回绝对路径 sourceFile.getAbsolutePath()
+        }
+    }
     private void setupOutline() {
         editorArea.textProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal == null) return;
@@ -649,6 +852,137 @@ public class MainController {
 
         fileContextMenu.getItems().addAll(renameItem, moveItem, new SeparatorMenuItem(), deleteItem);
         fileTree.setContextMenu(fileContextMenu);
+    }
+
+    /**
+     * 设置文件树的拖拽功能
+     */
+    private void setupDragAndDrop() {
+        fileTree.setCellFactory(tree -> {
+            TreeCell<String> cell = new TreeCell<>() {
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        setText(null);
+                        setGraphic(null);
+                    } else {
+                        // --- 保持你原有的显示逻辑 ---
+                        // 如果是叶子节点（笔记），只显示下划线后面的部分
+                        // 如果是文件夹（分类），直接显示名字
+                        TreeItem<String> treeItem = getTreeItem();
+                        if (treeItem != null && treeItem.isLeaf()) {
+                            // 笔记：解析 "分类_笔记名" -> "笔记名"
+                            if (item.contains("_")) {
+                                setText(item.substring(item.indexOf("_") + 1));
+                            } else {
+                                setText(item);
+                            }
+                            // 可以加个图标
+                            // setGraphic(new ImageView(new Image("...")));
+                        } else {
+                            // 文件夹
+                            setText(item);
+                        }
+                    }
+                }
+            };
+
+            // --- 1. 拖拽探测 (Drag Detected) ---
+            cell.setOnDragDetected(event -> {
+                if (!cell.isEmpty() && cell.getTreeItem().isLeaf()) {
+                    // 只有“笔记”可以被拖拽，文件夹不能拖
+                    javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.MOVE);
+                    javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+                    // 我们把完整的 "分类_笔记名" 放入剪贴板
+                    content.putString(cell.getItem());
+                    db.setContent(content);
+                    event.consume();
+                }
+            });
+
+            // --- 2. 拖拽经过 (Drag Over) ---
+            cell.setOnDragOver(event -> {
+                // 接受条件：拖拽有内容，且目标不是自己
+                if (event.getGestureSource() != cell && event.getDragboard().hasString()) {
+                    // 只能拖到“文件夹”上，或者拖到“文件夹里的其他笔记”上（意为归入该文件夹）
+                    if (!cell.isEmpty()) {
+                        event.acceptTransferModes(javafx.scene.input.TransferMode.MOVE);
+                    }
+                }
+                event.consume();
+            });
+
+            // --- 3. 拖拽释放 (Drag Dropped) - 核心逻辑 ---
+            cell.setOnDragDropped(event -> {
+                javafx.scene.input.Dragboard db = event.getDragboard();
+                boolean success = false;
+
+                if (db.hasString()) {
+                    String sourceFullFileName = db.getString(); // 例如 "课程学习_Java笔记"
+                    TreeItem<String> targetTreeItem = cell.getTreeItem();
+
+                    // 1. 确定目标分类名称
+                    String targetCategory;
+                    if (targetTreeItem.isLeaf()) {
+                        // 如果拖到了另一个笔记上，就取那个笔记的父节点（文件夹）作为目标
+                        targetCategory = targetTreeItem.getParent().getValue();
+                    } else {
+                        // 如果直接拖到了文件夹上
+                        targetCategory = targetTreeItem.getValue();
+                    }
+
+                    // 2. 提取原笔记的纯标题
+                    String noteTitle = sourceFullFileName;
+                    if (sourceFullFileName.contains("_")) {
+                        noteTitle = sourceFullFileName.substring(sourceFullFileName.indexOf("_") + 1);
+                    }
+
+                    // 3. 构造新的文件名
+                    String newFullFileName = targetCategory + "_" + noteTitle;
+
+                    // 4. 执行文件重命名操作
+                    if (!sourceFullFileName.equals(newFullFileName)) {
+                        success = moveNoteFile(sourceFullFileName, newFullFileName);
+                    }
+                }
+
+                event.setDropCompleted(success);
+                event.consume();
+
+                // 5. 如果成功，刷新文件树
+                if (success) {
+                    refreshFileTree();
+                }
+            });
+
+            return cell;
+        });
+    }
+
+    /**
+     * 物理移动文件（重命名）
+     */
+    private boolean moveNoteFile(String oldName, String newName) {
+        // 假设你的笔记都在 "notes/" 目录下，根据你的 FileUtil 调整路径
+        java.io.File oldFile = new java.io.File("notes/" + oldName + ".md");
+        java.io.File newFile = new java.io.File("notes/" + newName + ".md");
+
+        if (oldFile.exists() && !newFile.exists()) {
+            boolean renamed = oldFile.renameTo(newFile);
+            if (renamed) {
+                System.out.println("笔记已移动: " + oldName + " -> " + newName);
+
+                // 可选：如果当前正在编辑这个文件，需要更新当前编辑器的状态
+                // checkAndUpdateCurrentEditor(newName);
+                return true;
+            } else {
+                System.out.println("文件移动失败，可能是被占用");
+            }
+        } else {
+            System.out.println("源文件不存在或目标文件已存在");
+        }
+        return false;
     }
 
     /**
@@ -1426,4 +1760,5 @@ public class MainController {
     @FXML private void handleH4() { insertAtLineStart("####"); }
     @FXML private void handleH5() { insertAtLineStart("#####"); }
     @FXML private void handleH6() { insertAtLineStart("######"); }
+
 }
