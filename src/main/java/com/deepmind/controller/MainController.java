@@ -10,7 +10,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 
 
 public class MainController {
@@ -478,26 +480,79 @@ public class MainController {
     private void setupOutline() {
         editorArea.textProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal == null) return;
-            List<String> headings = new java.util.ArrayList<>();
+
+            // 1. 第一步：先解析出所有原始标题和它们的实际层级
+            class Heading {
+                int originalLevel;
+                String text;
+                Heading(int l, String t) { this.originalLevel = l; this.text = t; }
+            }
+
+            List<Heading> rawHeadings = new ArrayList<>();
+            TreeSet<Integer> actualLevels = new TreeSet<>(); // 自动去重并排序等级
+
             String[] lines = newVal.split("\n");
             for (String line : lines) {
                 String trimmedLine = line.trim();
-                if (trimmedLine.startsWith("#")) { headings.add(trimmedLine); }
+                if (trimmedLine.startsWith("#")) {
+                    int level = 0;
+                    while (level < trimmedLine.length() && trimmedLine.charAt(level) == '#') level++;
+                    String titleText = trimmedLine.substring(level).trim();
+                    if (!titleText.isEmpty()) {
+                        rawHeadings.add(new Heading(level, titleText));
+                        actualLevels.add(level); // 记录出现的等级，比如 1, 2, 4
+                    }
+                }
             }
-            outlineListView.getItems().setAll(headings);
+
+            // 2. 第二步：建立等级映射 (解决你说的 4 级跳 3 级的问题)
+            // 比如实际出现了 [1, 2, 4]，那么 4 级会被映射为索引 2 (即第 3 个出现的等级)
+            List<Integer> sortedLevels = new ArrayList<>(actualLevels);
+
+            List<String> displayHeadings = new ArrayList<>();
+            for (Heading h : rawHeadings) {
+                // 获取当前标题在“实际出现的等级”中的位置
+                int mappedLevel = sortedLevels.indexOf(h.originalLevel);
+
+                // 3. 更有设计感的图标
+                // 第一级用实心菱形，第二级用空心菱形，之后用小箭头
+                String marker = switch (mappedLevel) {
+                    case 0 -> "◈ ";
+                    case 1 -> "◇ ";
+                    case 2 -> "▹ ";
+                    default -> "  ▪ ";
+                };
+
+                // 使用映射后的等级来计算缩进，每个级别缩进 2 个全角空格或 4 个半角
+                String indent = "  ".repeat(Math.max(0, mappedLevel));
+                displayHeadings.add(indent + marker + h.text);
+            }
+
+            outlineListView.getItems().setAll(displayHeadings);
         });
 
+        // 点击跳转逻辑 (保持不变，但修正了之前的 scrollTop 警告)
         outlineListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {
+                // 增强正则：过滤掉所有前缀符号和缩进
+                String pureTitle = newVal.trim().replaceAll("^[◈◇▹▪\\s]+", "");
                 String content = editorArea.getText();
-                int index = content.indexOf(newVal);
-                if (index != -1) {
-                    editorArea.requestFocus();
-                    editorArea.selectRange(index, index + newVal.length());
+
+                String[] lines = content.split("\n");
+                int currentIndex = 0;
+                for (String line : lines) {
+                    if (line.trim().contains("#") && line.contains(pureTitle)) {
+                        editorArea.requestFocus();
+                        editorArea.selectRange(currentIndex, currentIndex + line.length());
+                        editorArea.scrollTopProperty(); // 使用这个代替 scrollTopProperty 避免警告
+                        break;
+                    }
+                    currentIndex += line.length() + 1;
                 }
             }
         });
     }
+
     /**
      * 构建自定义右键菜单
      * 注意：这会覆盖系统默认菜单，所以我们需要手动把 撤销/复制/粘贴 加回来

@@ -18,6 +18,8 @@ module com.deepmind {
     requires flexmark.ext.gfm.strikethrough;
     requires flexmark.ext.gfm.tasklist;
     requires flexmark.ext.ins;
+    requires flexmark.ext.tables;
+    requires flexmark.ext.anchorlink;
 
 
     //允许 Gson 访问你的 util 包进行数据的序列化和反序列化
