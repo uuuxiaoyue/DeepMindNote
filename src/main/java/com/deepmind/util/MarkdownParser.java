@@ -1,13 +1,8 @@
 package com.deepmind.util;
-import com.vladsch.flexmark.ext.anchorlink.AnchorLinkExtension;
-import com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension;
-import com.vladsch.flexmark.ext.tables.TablesExtension;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
-import com.vladsch.flexmark.util.data.MutableDataHolder;
 import com.vladsch.flexmark.util.data.MutableDataSet;
-
-import java.util.Arrays;
+import com.vladsch.flexmark.parser.ParserEmulationProfile;
 
 public class MarkdownParser {
     public static String parse(String md) {
@@ -21,15 +16,12 @@ public class MarkdownParser {
         // 3. 倾斜: *文本* -> <i>文本</i>
         md = md.replaceAll("(?<!\\*)\\*([^\\*\\n]+)\\*(?!\\*)", "<i>$1</i>");
 
-//        MutableDataSet options = new MutableDataSet();
-//        // 如果有扩展插件需求可以在此配置
-//        Parser parser = Parser.builder(options).build();
-//        HtmlRenderer renderer = HtmlRenderer.builder(options).build();
-//
 //        // 仅返回渲染后的 HTML 内容，如 <p>Hello</p>
 //        return renderer.render(parser.parse(md));
         // 2. 标准解析
         MutableDataSet options = new MutableDataSet();
+        options.setFrom(ParserEmulationProfile.GITHUB_DOC);
+        options.set(HtmlRenderer.SOFT_BREAK, "<br />");
         Parser parser = Parser.builder(options).build();
         HtmlRenderer renderer = HtmlRenderer.builder(options).build();
         String contentHtml = renderer.render(parser.parse(md));

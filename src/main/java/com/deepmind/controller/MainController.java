@@ -11,6 +11,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.TreeSet;
 
@@ -35,7 +36,6 @@ public class MainController {
     @FXML private VBox rootContainer;
     @FXML private SplitPane splitPane;
 
-    // 注意：btnToggleMenu 已删除
     @FXML private ToggleButton btnToggleSidebar;
     @FXML private MenuBar mainMenuBar;
 
@@ -49,7 +49,7 @@ public class MainController {
     @FXML private VBox findReplacePane;
     @FXML private HBox replaceBox;
     @FXML private TextField findInputField;
-    @FXML private TextField replaceInputField;;
+    @FXML private TextField replaceInputField;
 
     @FXML
     public void initialize() {
@@ -120,7 +120,7 @@ public class MainController {
         }
 
         // 排序：让分类按名称排个序，好看点
-        root.getChildren().sort((o1, o2) -> o1.getValue().compareTo(o2.getValue()));
+        root.getChildren().sort(Comparator.comparing(TreeItem::getValue));
 
         fileTree.setRoot(root);
         fileTree.setShowRoot(false);
@@ -319,16 +319,16 @@ public class MainController {
 
     @FXML
     private void handleToggleSidebar() {
-        boolean show = btnToggleSidebar.isSelected();
+        boolean show = splitPane.getItems().contains(sidebarContainer);
         if (show) {
-            if (!splitPane.getItems().contains(sidebarContainer)) {
-                splitPane.getItems().add(0, sidebarContainer);
-                splitPane.setDividerPositions(lastDividerPosition, 0.8);
-            }
-        } else {
             double[] dividers = splitPane.getDividerPositions();
             if (dividers.length > 0) lastDividerPosition = dividers[0];
             splitPane.getItems().remove(sidebarContainer);
+        } else {
+
+            splitPane.getItems().addFirst(sidebarContainer);
+            splitPane.setDividerPositions(lastDividerPosition, 0.8);
+
         }
     }
 
@@ -474,7 +474,9 @@ public class MainController {
                 alert.setContentText("要不要回顾一下 [" + randomTitle + "]？");
                 alert.show();
             }
-        } catch (IOException e) {}
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void setupOutline() {
@@ -888,8 +890,7 @@ public class MainController {
     @FXML
     private void handleThemeMenuAction(javafx.event.ActionEvent event) {
         // 获取被点击的菜单项
-        if (event.getSource() instanceof MenuItem) {
-            MenuItem item = (MenuItem) event.getSource();
+        if (event.getSource() instanceof MenuItem item) {
             String themeName = item.getText(); // 获取文字，例如 "暗夜黑"
 
             // 调用你原有的应用主题逻辑
@@ -1328,7 +1329,7 @@ public class MainController {
         } else {
             // 回滚到开头循环查找
             lastSearchIndex = 0;
-            int retry = content.indexOf(query, 0);
+            int retry = content.indexOf(query);
             if (retry != -1) {
                 editorArea.requestFocus();
                 editorArea.selectRange(retry, retry + query.length());

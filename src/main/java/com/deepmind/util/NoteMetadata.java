@@ -12,4 +12,5 @@ public class NoteMetadata {
 
     // 如果你想做更高级的，可以加这个：
     public Map<String, String> tags = new HashMap<>();
+
 }

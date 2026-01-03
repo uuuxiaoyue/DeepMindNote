@@ -1,135 +1,147 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.scene.control.*?>
-<?import javafx.scene.layout.*?>
-<?import javafx.scene.web.WebView?>
 <?import javafx.geometry.Insets?>
-<VBox fx:id="rootContainer" prefHeight="700.0" prefWidth="1100.0"
-      xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.deepmind.controller.MainController"
-      stylesheets="@../css/style.css">
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.RadioMenuItem?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.control.TreeView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.SVGPath?>
+<?import javafx.scene.web.WebView?>
 
-    <HBox styleClass="top-bar" spacing="10" alignment="CENTER_LEFT">
+<VBox fx:id="rootContainer" prefHeight="700.0" prefWidth="1100.0" stylesheets="@../css/style.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.deepmind.controller.MainController">
 
-        <ToggleButton fx:id="btnToggleSidebar" text="◰" styleClass="icon-button"
-                      onAction="#handleToggleSidebar" selected="true">
-            <tooltip><Tooltip text="显示/隐藏侧边栏"/></tooltip>
-        </ToggleButton>
+    <HBox alignment="CENTER_LEFT" spacing="10" styleClass="top-bar">
 
         <Separator orientation="VERTICAL" />
 
-        <MenuBar fx:id="mainMenuBar" styleClass="menu-bar" style="-fx-background-color: transparent;">
+        <MenuBar fx:id="mainMenuBar" style="-fx-background-color: transparent;" styleClass="menu-bar">
             <menus>
                 <Menu text="文件(F)">
                     <items>
-                        <MenuItem text="新建" accelerator="Ctrl+N" onAction="#handleNewNote"/>
-                        <MenuItem text="新建窗口" accelerator="Ctrl+Shift+N" onAction="#handleNewWindow"/>
+                        <MenuItem accelerator="Ctrl+N" onAction="#handleNewNote" text="新建" />
+                        <MenuItem accelerator="Ctrl+Shift+N" onAction="#handleNewWindow" text="新建窗口" />
                         <SeparatorMenuItem />
 
-                        <MenuItem text="打开..." accelerator="Ctrl+O" onAction="#handleOpenFile"/>
-                        <MenuItem text="打开文件夹..." onAction="#handleOpenFolder"/>
+                        <MenuItem accelerator="Ctrl+O" onAction="#handleOpenFile" text="打开..." />
+                        <MenuItem onAction="#handleOpenFolder" text="打开文件夹..." />
                         <SeparatorMenuItem />
 
-                        <MenuItem text="快速打开..." accelerator="Ctrl+P" onAction="#handleQuickOpen"/>
-                        <Menu fx:id="recentFilesMenu" text="打开最近文件"/> <SeparatorMenuItem />
+                        <MenuItem accelerator="Ctrl+P" onAction="#handleQuickOpen" text="快速打开..." />
+                        <Menu fx:id="recentFilesMenu" text="打开最近文件" /> <SeparatorMenuItem />
 
-                        <MenuItem text="保存" accelerator="Ctrl+S" onAction="#handleSave"/>
-                        <MenuItem text="另存为..." accelerator="Ctrl+Shift+S" onAction="#handleSaveAs"/>
-                        <MenuItem text="保存全部打开的文件..." onAction="#handleSave"/> <SeparatorMenuItem />
+                        <MenuItem accelerator="Ctrl+S" onAction="#handleSave" text="保存" />
+                        <MenuItem accelerator="Ctrl+Shift+S" onAction="#handleSaveAs" text="另存为..." />
+                        <MenuItem onAction="#handleSave" text="保存全部打开的文件..." /> <SeparatorMenuItem />
 
-                        <MenuItem text="属性..." onAction="#handleShowProperties"/>
-                        <MenuItem text="打开文件位置..." onAction="#handleOpenFolder"/>
-                        <MenuItem text="删除..." onAction="#handleDelete"/>
+                        <MenuItem onAction="#handleShowProperties" text="属性..." />
+                        <MenuItem onAction="#handleOpenFolder" text="打开文件位置..." />
+                        <MenuItem onAction="#handleDelete" text="删除..." />
                         <SeparatorMenuItem />
 
-                        <MenuItem text="导入..." accelerator="Ctrl+I" onAction="#handleImport"/>
+                        <MenuItem accelerator="Ctrl+I" onAction="#handleImport" text="导入..." />
                         <Menu text="导出">
                             <items>
-                                <MenuItem text="Markdown (.md)" onAction="#handleExportMarkdown" />
-                                <MenuItem text="PDF 文档 (.pdf)" onAction="#handleExportPDF" />
-                                <MenuItem text="Word 文档 (.docx)" onAction="#handleExportWord" />
+                                <MenuItem onAction="#handleExportMarkdown" text="Markdown (.md)" />
+                                <MenuItem onAction="#handleExportPDF" text="PDF 文档 (.pdf)" />
+                                <MenuItem onAction="#handleExportWord" text="Word 文档 (.docx)" />
                                 <SeparatorMenuItem />
-                                <MenuItem text="网页 (带样式 .html)" onAction="#handleExportHTMLFull" />
-                                <MenuItem text="网页 (纯净版 .html)" onAction="#handleExportHTMLRaw" />
+                                <MenuItem onAction="#handleExportHTMLFull" text="网页 (带样式 .html)" />
+                                <MenuItem onAction="#handleExportHTMLRaw" text="网页 (纯净版 .html)" />
                                 <SeparatorMenuItem />
-                                <MenuItem text="长图分享 (.png)" onAction="#handleExportImage" />
+                                <MenuItem onAction="#handleExportImage" text="长图分享 (.png)" />
                             </items>
                         </Menu>
 
-                        <MenuItem text="打印..." accelerator="Alt+Shift+P" onAction="#handlePrint"/>
+                        <MenuItem accelerator="Alt+Shift+P" onAction="#handlePrint" text="打印..." />
                         <SeparatorMenuItem />
 
-                        <MenuItem text="偏好设置..." accelerator="Ctrl+,"/>
+                        <MenuItem accelerator="Ctrl+," text="偏好设置..." />
                         <SeparatorMenuItem />
 
-                        <MenuItem text="关闭" accelerator="Ctrl+W" onAction="#handleClose"/>
+                        <MenuItem accelerator="Ctrl+W" onAction="#handleClose" text="关闭" />
                     </items>
                 </Menu>
                 <Menu text="编辑(E)">
                     <items>
-                        <MenuItem text="撤销" accelerator="Ctrl+Z" onAction="#handleUndo"/>
-                        <MenuItem text="重做" accelerator="Ctrl+Y" onAction="#handleRedo"/>
+                        <MenuItem accelerator="Ctrl+Z" onAction="#handleUndo" text="撤销" />
+                        <MenuItem accelerator="Ctrl+Y" onAction="#handleRedo" text="重做" />
                         <SeparatorMenuItem />
-                        <MenuItem text="剪切" accelerator="Ctrl+X" onAction="#handleCut"/>
-                        <MenuItem text="复制" accelerator="Ctrl+C" onAction="#handleCopy"/>
-                        <MenuItem text="粘贴" accelerator="Ctrl+V" onAction="#handlePaste"/>
+                        <MenuItem accelerator="Ctrl+X" onAction="#handleCut" text="剪切" />
+                        <MenuItem accelerator="Ctrl+C" onAction="#handleCopy" text="复制" />
+                        <MenuItem accelerator="Ctrl+V" onAction="#handlePaste" text="粘贴" />
                         <SeparatorMenuItem />
-                        <MenuItem text="查找" accelerator="Ctrl+F" onAction="#handleFind"/>
-                        <MenuItem text="替换" accelerator="Ctrl+H" onAction="#handleReplace"/>
+                        <MenuItem accelerator="Ctrl+F" onAction="#handleFind" text="查找" />
+                        <MenuItem accelerator="Ctrl+H" onAction="#handleReplace" text="替换" />
                     </items>
                 </Menu>
 
                 <Menu text="段落(P)">
                     <items>
-                        <MenuItem text="无序列表" onAction="#handleUnorderedList" accelerator="Ctrl+U"/>
-                        <MenuItem text="有序列表" onAction="#handleOrderedList" accelerator="Ctrl+O"/>
+                        <MenuItem accelerator="Ctrl+U" onAction="#handleUnorderedList" text="无序列表" />
+                        <MenuItem accelerator="Ctrl+O" onAction="#handleOrderedList" text="有序列表" />
 <!--                        <MenuItem text="任务列表" onAction="#handleTaskList" accelerator="Ctrl+T"/>-->
                         <SeparatorMenuItem />
                         <Menu text="标题级别">
                             <items>
-                                <MenuItem text="一级标题 (H1)" onAction="#handleH1" accelerator="Ctrl+1"/>
-                                <MenuItem text="二级标题 (H2)" onAction="#handleH2" accelerator="Ctrl+2"/>
-                                <MenuItem text="三级标题 (H3)" onAction="#handleH3" accelerator="Ctrl+3"/>
-                                <MenuItem text="四级标题 (H4)" onAction="#handleH4" accelerator="Ctrl+4"/>
-                                <MenuItem text="五级标题 (H5)" onAction="#handleH5" accelerator="Ctrl+5"/>
-                                <MenuItem text="六级标题 (H6)" onAction="#handleH6" accelerator="Ctrl+6"/>
+                                <MenuItem accelerator="Ctrl+1" onAction="#handleH1" text="一级标题 (H1)" />
+                                <MenuItem accelerator="Ctrl+2" onAction="#handleH2" text="二级标题 (H2)" />
+                                <MenuItem accelerator="Ctrl+3" onAction="#handleH3" text="三级标题 (H3)" />
+                                <MenuItem accelerator="Ctrl+4" onAction="#handleH4" text="四级标题 (H4)" />
+                                <MenuItem accelerator="Ctrl+5" onAction="#handleH5" text="五级标题 (H5)" />
+                                <MenuItem accelerator="Ctrl+6" onAction="#handleH6" text="六级标题 (H6)" />
                             </items>
                         </Menu>
                         <SeparatorMenuItem />
-                        <MenuItem text="引用块" onAction="#handleBlockquote" accelerator="Ctrl+Q"/>
+                        <MenuItem accelerator="Ctrl+Q" onAction="#handleBlockquote" text="引用块" />
                     </items>
                 </Menu>
 
                 <Menu text="格式(O)">
                     <items>
-                        <MenuItem text="加粗" onAction="#handleBold" accelerator="Ctrl+B"/>
-                        <MenuItem text="倾斜" onAction="#handleItalic" accelerator="Ctrl+I"/>
-                        <MenuItem text="删除线" onAction="#handleStrikethrough" accelerator="Ctrl+D"/>
-                        <MenuItem text="高亮" onAction="#handleHighlight" accelerator="Ctrl+H"/>
+                        <MenuItem accelerator="Ctrl+B" onAction="#handleBold" text="加粗" />
+                        <MenuItem accelerator="Ctrl+I" onAction="#handleItalic" text="倾斜" />
+                        <MenuItem accelerator="Ctrl+D" onAction="#handleStrikethrough" text="删除线" />
+                        <MenuItem accelerator="Ctrl+H" onAction="#handleHighlight" text="高亮" />
                     </items>
                 </Menu>
 
                 <Menu text="视图(V)">
                     <items>
-                        <MenuItem text="源代码模式" onAction="#handleEditMode"/>
-                        <MenuItem text="预览模式" onAction="#handlePreviewMode"/>
+                        <MenuItem onAction="#handleEditMode" text="源代码模式" />
+                        <MenuItem onAction="#handlePreviewMode" text="预览模式" />
                         <SeparatorMenuItem />
-                        <MenuItem text="显示/隐藏侧边栏" onAction="#handleToggleSidebar"/>
-                        <MenuItem text="显示/隐藏大纲" onAction="#toggleOutline"/>
+                        <MenuItem onAction="#handleToggleSidebar" text="显示/隐藏侧边栏" />
+                        <MenuItem onAction="#toggleOutline" text="显示/隐藏大纲" />
                     </items>
                 </Menu>
                 <Menu text="主题(T)">
                     <items>
-                        <RadioMenuItem text="默认蓝" onAction="#handleThemeMenuAction" selected="true">
-                            <toggleGroup><ToggleGroup fx:id="themeGroup"/></toggleGroup>
+                        <RadioMenuItem onAction="#handleThemeMenuAction" selected="true" text="默认蓝">
+                            <toggleGroup><ToggleGroup fx:id="themeGroup" /></toggleGroup>
                         </RadioMenuItem>
-                        <RadioMenuItem text="暗夜黑" onAction="#handleThemeMenuAction" toggleGroup="$themeGroup"/>
-                        <RadioMenuItem text="森系绿" onAction="#handleThemeMenuAction" toggleGroup="$themeGroup"/>
-                        <RadioMenuItem text="暖阳橙" onAction="#handleThemeMenuAction" toggleGroup="$themeGroup"/>
+                        <RadioMenuItem onAction="#handleThemeMenuAction" text="暗夜黑" toggleGroup="$themeGroup" />
+                        <RadioMenuItem onAction="#handleThemeMenuAction" text="森系绿" toggleGroup="$themeGroup" />
+                        <RadioMenuItem onAction="#handleThemeMenuAction" text="暖阳橙" toggleGroup="$themeGroup" />
                     </items>
                 </Menu>
                 <Menu text="帮助(H)">
-                    <items><MenuItem text="关于"/></items>
+                    <items><MenuItem text="关于" /></items>
                 </Menu>
             </menus>
         </MenuBar>
@@ -137,80 +149,87 @@
     </HBox>
 
 
-    <SplitPane fx:id="splitPane" dividerPositions="0.2, 0.8" VBox.vgrow="ALWAYS" style="-fx-background-color: -color-bg-base;">
+    <SplitPane fx:id="splitPane" dividerPositions="0.2, 0.8" style="-fx-background-color: -color-bg-base;" VBox.vgrow="ALWAYS">
         <items>
-            <VBox fx:id="sidebarContainer" minWidth="0" maxWidth="400" spacing="10" styleClass="sidebar">
-                <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+            <VBox fx:id="sidebarContainer" maxWidth="400" minWidth="0" spacing="10" styleClass="sidebar">
+                <padding><Insets bottom="10" left="10" right="10" top="10" /></padding>
 
                 <HBox alignment="CENTER_RIGHT" spacing="5">
                     <Region HBox.hgrow="ALWAYS" />
 
                     <Button onAction="#handleNewNote" styleClass="icon-btn-small">
-                        <tooltip><Tooltip text="新建笔记"/></tooltip>
+                        <tooltip><Tooltip text="新建笔记" /></tooltip>
                         <graphic>
-                            <javafx.scene.shape.SVGPath content="M14 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10zm0 2H4v12h10V6z M11 8l-4 4 4 4" fill="#6c757d" scaleX="0.8" scaleY="0.8"/>
-                            <javafx.scene.shape.SVGPath content="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="#6c757d" scaleX="0.7" scaleY="0.7"/>
+                            <javafx.scene.shape.SVGPath content="M14 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10zm0 2H4v12h10V6z M11 8l-4 4 4 4" fill="#6c757d" scaleX="0.8" scaleY="0.8" />
+                            <javafx.scene.shape.SVGPath content="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="#6c757d" scaleX="0.7" scaleY="0.7" />
                         </graphic>
                     </Button>
 
                     <Button onAction="#handleNewFolder" styleClass="icon-btn-small">
-                        <tooltip><Tooltip text="新建分类文件夹"/></tooltip>
+                        <tooltip><Tooltip text="新建分类文件夹" /></tooltip>
                         <graphic>
-                            <javafx.scene.shape.SVGPath content="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z M15 14h-2v2h-2v-2H9v-2h2v-2h2v2h2v2z" fill="#6c757d" scaleX="0.7" scaleY="0.7"/>
+                            <javafx.scene.shape.SVGPath content="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z M15 14h-2v2h-2v-2H9v-2h2v-2h2v2h2v2z" fill="#6c757d" scaleX="0.7" scaleY="0.7" />
                         </graphic>
                     </Button>
                 </HBox>
 
                 <TextField fx:id="searchField" promptText="🔍 搜索笔记..." />
 
-                <TreeView fx:id="fileTree" VBox.vgrow="ALWAYS" showRoot="false"/>
+                <TreeView fx:id="fileTree" showRoot="false" VBox.vgrow="ALWAYS" />
             </VBox>
 
             <VBox spacing="10" style="-fx-background-color: -color-bg-base;">
                 <StackPane VBox.vgrow="ALWAYS">
-                    <TextArea fx:id="editorArea" wrapText="true" visible="false" managed="false" />
-                    <WebView fx:id="webView" visible="true" managed="true" />
+                    <TextArea fx:id="editorArea" managed="false" visible="false" wrapText="true" />
+                    <WebView fx:id="webView" managed="true" visible="true" />
 
-                    <VBox fx:id="findReplacePane" visible="false" managed="false"
-                          StackPane.alignment="TOP_RIGHT" maxWidth="350" maxHeight="110"
-                          style="-fx-background-color: white; -fx-background-radius: 8; -fx-border-color: #ddd; -fx-border-radius: 8; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 10, 0, 0, 5); -fx-padding: 10;">
+                    <VBox fx:id="findReplacePane" managed="false" maxHeight="110" maxWidth="350" style="-fx-background-color: white; -fx-background-radius: 8; -fx-border-color: #ddd; -fx-border-radius: 8; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 10, 0, 0, 5); -fx-padding: 10;" visible="false" StackPane.alignment="TOP_RIGHT">
 
-                        <HBox spacing="8" alignment="CENTER_LEFT">
-                            <TextField fx:id="findInputField" promptText="查找..." HBox.hgrow="ALWAYS"
-                                       style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;"/>
-                            <Button text="↓" onAction="#findNext" styleClass="status-btn" />
-                            <Button text="✕" onAction="#closeFindPane" style="-fx-background-color: transparent; -fx-text-fill: #999; -fx-cursor: hand;"/>
+                        <HBox alignment="CENTER_LEFT" spacing="8">
+                            <TextField fx:id="findInputField" promptText="查找..." style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;" HBox.hgrow="ALWAYS" />
+                            <Button onAction="#findNext" styleClass="status-btn" text="↓" />
+                            <Button onAction="#closeFindPane" style="-fx-background-color: transparent; -fx-text-fill: #999; -fx-cursor: hand;" text="✕" />
                         </HBox>
 
-                        <HBox fx:id="replaceBox" spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 8 0 0 0;">
-                            <TextField fx:id="replaceInputField" promptText="替换为..." HBox.hgrow="ALWAYS"
-                                       style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;"/>
-                            <Button text="替换" onAction="#handleReplaceSingle" styleClass="status-btn" style="-fx-font-size: 11px;"/>
-                            <Button text="全部" onAction="#handleReplaceAll" styleClass="status-btn" style="-fx-font-size: 11px;"/>
+                        <HBox fx:id="replaceBox" alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 8 0 0 0;">
+                            <TextField fx:id="replaceInputField" promptText="替换为..." style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;" HBox.hgrow="ALWAYS" />
+                            <Button onAction="#handleReplaceSingle" style="-fx-font-size: 11px;" styleClass="status-btn" text="替换" />
+                            <Button onAction="#handleReplaceAll" style="-fx-font-size: 11px;" styleClass="status-btn" text="全部" />
                         </HBox>
                     </VBox>
                 </StackPane>
 
                 <HBox alignment="CENTER_LEFT" spacing="10" styleClass="status-bar">
-                    <Label fx:id="wordCountLabel" text="字数: 0" styleClass="text-muted" />
+                    <Label fx:id="wordCountLabel" styleClass="text-muted" text="字数: 0" />
 
                     <Region HBox.hgrow="ALWAYS" />
+               <ToggleButton fx:id="btnToggleSidebar" onAction="#handleToggleSidebar" selected="true" styleClass="icon-button">
+                  <tooltip>
+                     <Tooltip text="显示/隐藏侧边栏" />
+                  </tooltip>
+                  <graphic>
+                     <SVGPath content="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M9 4v16" fill="TRANSPARENT" stroke="#a3a3a3" styleClass="svg-path" />
+                  </graphic>
+               </ToggleButton>
 
                     <Button onAction="#handleEditMode" styleClass="status-btn" text="&lt;/&gt;">
-                        <tooltip><Tooltip text="启用源代码模式"/></tooltip>
+                        <tooltip><Tooltip text="启用源代码模式" /></tooltip>
                     </Button>
 
-                    <Button onAction="#toggleOutline" styleClass="status-btn" text="○">
-                        <tooltip><Tooltip text="展开/关闭大纲栏"/></tooltip>
+                    <Button onAction="#toggleOutline" styleClass="status-btn">
+                        <tooltip><Tooltip text="展开/关闭大纲栏" /></tooltip>
+                  <graphic>
+                     <SVGPath content="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M15 4v16" fill="TRANSPARENT" stroke="#a3a3a3" />
+                  </graphic>
                     </Button>
 
 
                 </HBox>
             </VBox>
 
-            <VBox fx:id="outlineContainer" minWidth="0" maxWidth="250" spacing="10" styleClass="sidebar">
-                <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
-                <Label text="文章大纲" style="-fx-font-weight:bold"/>
+            <VBox fx:id="outlineContainer" maxWidth="250" minWidth="0" spacing="10" styleClass="sidebar">
+                <padding><Insets bottom="10" left="10" right="10" top="10" /></padding>
+                <Label style="-fx-font-weight:bold" text="文章大纲" />
                 <ListView fx:id="outlineListView" VBox.vgrow="ALWAYS" />
             </VBox>
         </items>
