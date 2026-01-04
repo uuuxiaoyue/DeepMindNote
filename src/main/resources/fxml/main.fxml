@@ -155,7 +155,7 @@
                 </Button>
             </HBox>
 
-            <TextField fx:id="searchField" promptText="🔍 搜索笔记..."/>
+            <TextField fx:id="sidebarSearchField" promptText="🔍 搜索笔记..."/>
 
             <TreeView fx:id="fileTree" showRoot="false" VBox.vgrow="ALWAYS"/>
         </VBox>
@@ -165,13 +165,14 @@
                 <TextArea fx:id="editorArea" managed="false" visible="false" wrapText="true"/>
                 <WebView fx:id="webView"/>
 
-                <VBox fx:id="findReplacePane" managed="false" maxHeight="110" maxWidth="350"
+                <VBox fx:id="editorFindPane" managed="false" maxHeight="110" maxWidth="350"
                       style="-fx-background-color: white; -fx-background-radius: 8; -fx-border-color: #ddd; -fx-border-radius: 8; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 10, 0, 0, 5); -fx-padding: 10;"
                       visible="false" StackPane.alignment="TOP_RIGHT">
 
                     <HBox alignment="CENTER_LEFT" spacing="8">
-                        <TextField fx:id="findInputField" promptText="查找..."
+                        <TextField fx:id="editorFindField" promptText="查找..."
                                    style="-fx-background-color: #f4f4f4; -fx-border-radius: 4;" HBox.hgrow="ALWAYS"/>
+                        <Button onAction="#findPrevious" styleClass="status-btn" text="↑"/>
                         <Button onAction="#findNext" styleClass="status-btn" text="↓"/>
                         <Button onAction="#closeFindPane"
                                 style="-fx-background-color: transparent; -fx-text-fill: #999; -fx-cursor: hand;"
@@ -186,6 +187,7 @@
                         <Button onAction="#handleReplaceAll" style="-fx-font-size: 11px;" styleClass="status-btn"
                                 text="全部"/>
                     </HBox>
+                    <Label fx:id="lblMatchCount" minWidth="60.0" prefHeight="15.0" prefWidth="188.0" text="Label"/>
                 </VBox>
             </StackPane>
 
@@ -193,8 +195,8 @@
                 <Label fx:id="wordCountLabel" styleClass="text-muted" text="字数: 0"/>
 
                 <Region HBox.hgrow="ALWAYS"/>
-                <ToggleButton fx:id="btnToggleSidebar" onAction="#handleToggleSidebar" prefHeight="0.0"
-                              prefWidth="54.0" selected="true">
+                <ToggleButton fx:id="btnToggleSidebar" onAction="#handleToggleSidebar" prefHeight="0.0" prefWidth="54.0"
+                              selected="true">
                     <tooltip>
                         <Tooltip text="显示/隐藏侧边栏"/>
                     </tooltip>

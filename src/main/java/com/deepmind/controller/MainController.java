@@ -3,23 +3,27 @@ package com.deepmind.controller;
 import com.deepmind.util.FileUtil;
 import com.deepmind.util.MarkdownParser;
 import com.deepmind.util.NoteMetadata;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.TreeSet;
-
-
 @SuppressWarnings("ALL")
 public class MainController {
+
 
     // --- 核心编辑区 ---
     @FXML private TextArea editorArea;
@@ -28,7 +32,8 @@ public class MainController {
 
     // --- 左侧单栏文件树 ---
     @FXML private TreeView<String> fileTree;
-    @FXML private TextField searchField;
+    @FXML
+    private TextField sidebarSearchField;
     @FXML private VBox sidebarContainer;
 
     // --- 右侧大纲 ---
@@ -47,20 +52,17 @@ public class MainController {
     private double lastDividerPosition = 0.2;
 
     //关于查找和搜索
-    private int lastSearchIndex = 0;
-    @FXML private VBox findReplacePane;
+    private int lastSideSearchIndex = 0;
+    @FXML
+    private VBox editorFindPane;
     @FXML private HBox replaceBox;
-    @FXML private TextField findInputField;
+    @FXML
+    private TextField editorFindField;
     @FXML private TextField replaceInputField;
-
-    // 对应 FXML 中的 fx:id="recentFilesMenu"
-
-    // 常量定义
-
-    // 内存中维护的文件列表
-
-    // 获取系统的偏好设置节点 (会自动保存在注册表或系统特定位置)
-
+    @FXML
+    private Label lblMatchCount; // 对应 FXML 里的 fx:id
+    // 用于记录上一次查找的位置
+    private int lastWebSearchIndex = -1;
 
     @FXML
     public void initialize() {
@@ -81,8 +83,12 @@ public class MainController {
         initFileTreeContextMenu(); // 文件树的右键菜单
 
         setupTreeSelection();
+
         setupDragAndDrop();
         setupDualDragAndDrop();
+        setupPasteLogic();
+
+        setupFindFeature();
     }
 
     /**
@@ -156,6 +162,115 @@ public class MainController {
         });
     }
 
+    /**
+     * 执行自定义粘贴逻辑
+     *
+     * @return true 表示成功粘贴了图片/文件；false 表示剪贴板里没有图片/文件（需要执行默认文本粘贴）
+     */
+    private boolean performCustomPaste() {
+        Clipboard clipboard = Clipboard.getSystemClipboard();
+
+        // 1. 检查文件 (复制的文件)
+        if (clipboard.hasFiles()) {
+            File file = clipboard.getFiles().get(0);
+            if (isImageFile(file)) {
+                String relativePath = saveImageToProject(file);
+                if (relativePath != null) {
+                    insertMarkdownImage(file.getName(), relativePath);
+                    return true; // 拦截成功
+                }
+            }
+        }
+        // 2. 检查图片 (截图)
+        else if (clipboard.hasImage()) {
+            Image image = clipboard.getImage();
+            String fileName = "screenshot_" + System.currentTimeMillis() + ".png";
+            String relativePath = saveRawImageToProject(image, fileName);
+
+            if (relativePath != null) {
+                insertMarkdownImage(fileName, relativePath);
+                return true; // 拦截成功
+            }
+        }
+
+        return false; // 没有图片，继续执行后续逻辑（粘贴文本）
+    }
+
+    /**
+     * 设置粘贴功能 (支持 Ctrl+V 粘贴截图和图片文件)
+     */
+    private void setupPasteLogic() {
+        editorArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            KeyCombination pasteKey = new KeyCodeCombination(KeyCode.V, KeyCombination.SHORTCUT_DOWN);
+
+            if (pasteKey.match(event)) {
+                // 调用刚才提取的方法
+                boolean handled = performCustomPaste();
+
+                // 如果成功粘贴了图片，就消耗掉事件，防止 TextArea 再去粘贴一遍文件名
+                if (handled) {
+                    event.consume();
+                }
+                // 如果 handled 为 false，事件会继续传递，TextArea 会自动执行默认的文本粘贴
+            }
+        });
+    }
+
+    /**
+     * 将内存中的 Image 对象 (截图) 保存为文件
+     */
+    private String saveRawImageToProject(Image image, String fileName) {
+        try {
+            // 1. 确定目录
+            File imageDir = new File("notes/images");
+            if (!imageDir.exists()) imageDir.mkdirs();
+
+            File targetFile = new File(imageDir, fileName);
+
+            // 2. JavaFX Image 转 BufferedImage
+            BufferedImage bImage = SwingFXUtils.fromFXImage(image, null);
+
+            // 3. 写入硬盘
+            ImageIO.write(bImage, "png", targetFile);
+
+            return "images/" + fileName;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void setupFindFeature() {
+        // 1. 定义通用更新器 (只更新计数标签，不移动光标)
+        javafx.beans.InvalidationListener counterUpdater = o -> updateMatchStatus(false);
+
+        // 2. 监听光标移动、模式切换 -> 只更新计数
+        editorArea.caretPositionProperty().addListener(counterUpdater);
+        editorArea.visibleProperty().addListener((obs, oldVal, newVisible) -> {
+            if (editorFindPane.isVisible()) {
+                if (newVisible) updateMatchStatus(true); // 切回编辑模式，尝试高亮当前
+                else javafx.application.Platform.runLater(() -> updateMatchStatus(true)); // 切到预览，执行JS
+            }
+        });
+
+        // 3. 【核心修改】监听输入框文字变化 -> 实时选中 + 更新计数
+        editorFindField.textProperty().addListener((obs, oldVal, newVal) -> {
+            // 输入文字时，强制执行一次“从头查找并选中”
+            handleIncrementalSearch(newVal);
+        });
+
+        // 4. 回车 -> 查找下一个
+        editorFindField.setOnAction(e -> findNext());
+    }
+
+    /**
+     * 辅助方法：插入 Markdown 图片语法
+     */
+    private void insertMarkdownImage(String imageName, String path) {
+        String markdown = String.format("![%s](%s)", imageName, path);
+        int caretPos = editorArea.getCaretPosition();
+        editorArea.insertText(caretPos, markdown);
+    }
     private boolean isCategoryNode(String name) {
         return "Root".equals(name) || "课程学习".equals(name) || "个人项目".equals(name) || "未分类".equals(name);
     }
@@ -300,7 +415,7 @@ public class MainController {
     }
 
     private void setupSearch() {
-        searchField.textProperty().addListener((observable, oldValue, newValue) -> {
+        sidebarSearchField.textProperty().addListener((observable, oldValue, newValue) -> {
             if (newValue == null || newValue.trim().isEmpty()) {
                 refreshFileTree();
                 return;
@@ -361,9 +476,6 @@ public class MainController {
 
     @FXML
     private void handleEditMode() {
-        // 调试日志，方便你观察是否触发了方法
-        System.out.println("当前编辑区状态: TextArea=" + editorArea.isVisible() + ", WebView=" + webView.isVisible());
-
         if (editorArea.isVisible()) {
             // --- 切换到预览模式 ---
             updatePreview(); // 先渲染内容
@@ -403,6 +515,73 @@ public class MainController {
         // 3. 构建完整的 HTML，注入 CSS 样式
         File notesDir = new File("notes/");
         String baseUrl = notesDir.toURI().toString();
+        // 1. removeHighlights(): 清除旧的高亮
+        // 2. highlightAll(keyword): 遍历文本节点，给匹配的词加上 <span class="search-highlight">
+        String jsScript = """
+                    <script>
+                        // 清除所有高亮标签，还原文本
+                        function removeHighlights() {
+                            const highlights = document.querySelectorAll('span.search-highlight');
+                            highlights.forEach(span => {
+                                const parent = span.parentNode;
+                                parent.replaceChild(document.createTextNode(span.textContent), span);
+                                parent.normalize(); // 合并相邻文本节点
+                            });
+                        }
+                
+                        // 高亮关键词并返回匹配数量
+                        function highlightAll(keyword) {
+                            removeHighlights(); // 先清除旧的
+                            if (!keyword) return 0;
+                
+                            // 使用 TreeWalker 遍历纯文本节点，避免破坏 HTML 标签结构
+                            const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                            const nodes = [];
+                            while(walk.nextNode()) nodes.push(walk.currentNode);
+                
+                            let count = 0;
+                            // 正则：转义特殊字符，gi 表示全局+忽略大小写
+                            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+                            const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
+                
+                            nodes.forEach(node => {
+                                // 跳过 script 和 style 标签内部
+                                if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
+                
+                                const text = node.nodeValue;
+                                if (regex.test(text)) {
+                                    const fragment = document.createDocumentFragment();
+                                    let lastIdx = 0;
+                
+                                    text.replace(regex, (match, p1, offset) => {
+                                        // 1. 添加匹配前的普通文本
+                                        fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
+                
+                                        // 2. 添加高亮节点
+                                        const span = document.createElement('span');
+                                        span.className = 'search-highlight';
+                                        span.textContent = match;
+                                        if (count === 0) span.id = 'first-match'; // 标记第一个
+                                        fragment.appendChild(span);
+                
+                                        lastIdx = offset + match.length;
+                                        count++;
+                                    });
+                
+                                    // 3. 添加剩余文本
+                                    fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
+                                    node.parentNode.replaceChild(fragment, node);
+                                }
+                            });
+                
+                            // 自动滚动到第一个结果
+                            const first = document.getElementById('first-match');
+                            if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
+                
+                            return count;
+                        }
+                    </script>
+                """;
         // 3. 拼接完整的 HTML 结构
         String htmlContent = "<!DOCTYPE html>"
                 + "<html>"
@@ -414,10 +593,13 @@ public class MainController {
                 + "        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }"
                 + "        /* 推荐：限制图片最大宽度，防止图片太大撑破屏幕 */"
                 + "        img { max-width: 100%; height: auto; }"
+                // --- CSS 高亮样式 ---
+                + "    .search-highlight { background-color: #ffeb3b; color: #000; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.2); }"
                 + "    </style>"
                 + "</head>"
                 + "<body>"
                 + markdownHtml
+                + jsScript // 注入 JS
                 + "</body>"
                 + "</html>";
         String html = buildHtml(htmlContent, isDark);
@@ -758,10 +940,7 @@ public class MainController {
         });
     }
 
-    /**
-     * 构建自定义右键菜单
-     * 注意：这会覆盖系统默认菜单，所以我们需要手动把 撤销/复制/粘贴 加回来
-     */
+
     private void initContextMenu() {
         // 1. 创建全新的右键菜单
         ContextMenu contextMenu = new ContextMenu();
@@ -780,7 +959,15 @@ public class MainController {
         copyItem.setOnAction(e -> editorArea.copy());
 
         MenuItem pasteItem = new MenuItem("粘贴");
-        pasteItem.setOnAction(e -> editorArea.paste());
+        pasteItem.setOnAction(e -> {
+            // 先尝试作为图片/文件粘贴
+            boolean handled = performCustomPaste();
+
+            // 如果没有粘贴图片（handled 为 false），则执行默认的文本粘贴
+            if (!handled) {
+                editorArea.paste();
+            }
+        });
 
         MenuItem selectAllItem = new MenuItem("全选");
         selectAllItem.setOnAction(e -> editorArea.selectAll());
@@ -1627,55 +1814,179 @@ public class MainController {
     // 菜单点击“查找” (Ctrl+F) 触发
     @FXML
     private void handleFind() {
-        findReplacePane.setVisible(true);
-        findReplacePane.setManaged(true);
+        editorFindPane.setVisible(true);
+        editorFindPane.setManaged(true);
         replaceBox.setVisible(false); // 查找模式下隐藏替换输入框
-        findInputField.requestFocus();
+        editorFindField.requestFocus();
         // 如果有选中文本，自动填入查找框
         String selected = editorArea.getSelectedText();
         if (!selected.isEmpty()) {
-            findInputField.setText(selected);
+            editorFindField.setText(selected);
+        } else {
+            // 如果没填入文字，可能需要清空计数
+            updateMatchStatus(true);
         }
     }
 
+    /**
+     * 更新查找结果计数 (格式：第 X 个 / 共 Y 个)
+     */
+    private void updateMatchStatus(boolean performHighlight) {
+        String query = editorFindField.getText();
+        String content = editorArea.getText();
+
+        // 1. 如果搜索框为空，清空标签
+        if (!editorFindPane.isVisible() || editorFindField.getText().isEmpty()) {
+            lblMatchCount.setText("");
+            editorFindField.setStyle(""); // 恢复输入框样式
+            return;
+        }
+        if (editorArea.isVisible()) {
+            String target = query;
+            String textToSearch = content;
+
+            int totalMatches = 0;
+            int currentMatchIndex = 0;
+
+            // 获取参照位置 (选区起点 或 光标位置)
+            int anchorPos = editorArea.getCaretPosition();
+            if (editorArea.getSelectedText().length() > 0) {
+                anchorPos = editorArea.getSelection().getStart();
+            }
+
+            // 遍历统计
+            int index = 0;
+            while ((index = textToSearch.indexOf(target, index)) != -1) {
+                totalMatches++;
+                if (index <= anchorPos) {
+                    currentMatchIndex = totalMatches;
+                }
+                index += target.length();
+            }
+
+            updateLabelUI(currentMatchIndex, totalMatches);
+        }
+
+        // =========================================================
+        // 场景 B: 预览模式 (WebView)
+        // =========================================================
+        else if (webView.isVisible()) {
+            try {
+                // 调用 JS 进行高亮，并获取 JS 返回的 int 计数
+                Object result = webView.getEngine().executeScript("highlightAll('" + escapeJs(query) + "')");
+                int totalMatches = (Integer) result;
+
+                // WebView 比较难获取当前滚动到了第几个，这里简化为只显示总数
+                if (totalMatches > 0) {
+                    lblMatchCount.setText("共 " + totalMatches + " 个");
+                    lblMatchCount.setStyle("-fx-text-fill: #999;");
+                } else {
+                    lblMatchCount.setText("无结果");
+                    lblMatchCount.setStyle("-fx-text-fill: #ff6b6b;");
+                }
+            } catch (Exception e) {
+                // 忽略 JS 执行错误 (比如页面还没加载完)
+            }
+        }
+    }
+
+    /**
+     * 辅助：更新 UI 标签颜色和文字
+     */
+    private void updateLabelUI(int current, int total) {
+        if (total == 0) {
+            lblMatchCount.setText("无结果");
+            lblMatchCount.setStyle("-fx-text-fill: #ff6b6b;"); // 红色
+        } else {
+            // 修正：如果光标在第一个词之前，current可能为0，显示 0/N 或者 1/N 均可
+            lblMatchCount.setText(String.format("%d / %d", current, total));
+            lblMatchCount.setStyle("-fx-text-fill: #999;"); // 灰色
+        }
+    }
+
+    /**
+     * 辅助：防止查询包含单引号导致 JS 报错
+     */
+    private String escapeJs(String str) {
+        return str.replace("'", "\\'");
+    }
     // 菜单点击“替换” (Ctrl+H) 触发
     @FXML
     private void handleReplace() {
-        findReplacePane.setVisible(true);
-        findReplacePane.setManaged(true);
+        editorFindPane.setVisible(true);
+        editorFindPane.setManaged(true);
         replaceBox.setVisible(true);  // 替换模式下显示替换输入框
-        findInputField.requestFocus();
+        editorFindField.requestFocus();
     }
 
-    // 查找下一个 (↓ 按钮触发)
     @FXML
-    private void findNext() {
-        String query = findInputField.getText();
+    private void findPrevious() {
+        String query = editorFindField.getText();
         if (query == null || query.isEmpty()) return;
 
         String content = editorArea.getText();
-        int index = content.indexOf(query, lastSearchIndex);
+
+        // 获取当前选中的起始位置 (如果没有选中，则为光标位置)
+        // 我们要从这个位置的前一个字符开始往回找
+        int currentPos = editorArea.getSelection().getStart();
+
+        // 核心逻辑：倒序查找 lastIndexOf
+        // 从 currentPos - 1 开始往前找
+        int index = content.lastIndexOf(query, currentPos - 1);
 
         if (index != -1) {
-            editorArea.requestFocus();
-            editorArea.selectRange(index, index + query.length());
-            lastSearchIndex = index + query.length();
+            selectAndScrollTo(index, query.length());
         } else {
-            // 回滚到开头循环查找
-            lastSearchIndex = 0;
-            int retry = content.indexOf(query);
+            // 没找到：循环查找，从文本末尾开始找
+            // flashNode(editorFindField); // 可选：给个输入框闪烁提示没找到
+            int retry = content.lastIndexOf(query);
             if (retry != -1) {
-                editorArea.requestFocus();
-                editorArea.selectRange(retry, retry + query.length());
-                lastSearchIndex = retry + query.length();
+                selectAndScrollTo(retry, query.length());
             }
         }
+        updateMatchStatus(true);
+    }
+    // 查找下一个 (↓ 按钮触发)
+    @FXML
+    private void findNext() {
+        String query = editorFindField.getText();
+        if (query == null || query.isEmpty()) return;
+
+        String content = editorArea.getText();
+
+        // 获取当前光标位置 (或选区结束位置)
+        // 从这个位置往后找
+        int currentPos = editorArea.getCaretPosition();
+
+        // 核心逻辑：正序查找 indexOf
+        int index = content.indexOf(query, currentPos);
+
+        if (index != -1) {
+            selectAndScrollTo(index, query.length());
+        } else {
+            // 没找到：循环查找，从文本开头开始找
+            int retry = content.indexOf(query);
+            if (retry != -1) {
+                selectAndScrollTo(retry, query.length());
+            }
+        }
+
+        updateMatchStatus(true);
+    }
+
+    private void selectAndScrollTo(int index, int length) {
+        // 1. 必须先让编辑器获取焦点，否则用户看不见光标闪烁
+        editorArea.requestFocus();
+
+        // 2. 选中查找到的文本
+        editorArea.selectRange(index, index + length);
+
     }
 
     // 5. 全部替换 (面板内“全部”按钮触发)
     @FXML
     private void handleReplaceAll() {
-        String query = findInputField.getText();
+        String query = editorFindField.getText();
         String target = replaceInputField.getText();
         if (query == null || query.isEmpty()) return;
 
@@ -1687,7 +1998,7 @@ public class MainController {
     // 替换当前 (面板内“替换”按钮触发)
     @FXML
     private void handleReplaceSingle() {
-        String query = findInputField.getText();
+        String query = editorFindField.getText();
         String target = replaceInputField.getText();
 
         // 如果当前选中的正是查找的内容，执行替换
@@ -1701,8 +2012,8 @@ public class MainController {
 
     @FXML
     private void closeFindPane() {
-        findReplacePane.setVisible(false);
-        findReplacePane.setManaged(false);
+        editorFindPane.setVisible(false);
+        editorFindPane.setManaged(false);
         editorArea.requestFocus();
     }
 
@@ -1759,6 +2070,39 @@ public class MainController {
     @FXML private void handleH3() { insertAtLineStart("###"); }
     @FXML private void handleH4() { insertAtLineStart("####"); }
     @FXML private void handleH5() { insertAtLineStart("#####"); }
-    @FXML private void handleH6() { insertAtLineStart("######"); }
+    @FXML private void handleH6() { insertAtLineStart("######");
+    }
 
+    /**
+     * 实时查找：输入什么，就马上选中什么
+     */
+    private void handleIncrementalSearch(String query) {
+        if (query == null || query.isEmpty()) {
+            lblMatchCount.setText("");
+            return;
+        }
+
+        // 仅在编辑模式下执行“选中”动作
+        if (editorArea.isVisible()) {
+            String content = editorArea.getText();
+
+            // 策略：从当前光标位置开始找，为了让用户看到最近的一个
+            int startPos = editorArea.getCaretPosition();
+            int index = content.indexOf(query, startPos);
+
+            // 如果后面没有，就从头找
+            if (index == -1) {
+                index = content.indexOf(query);
+            }
+
+            if (index != -1) {
+                // 【关键步骤】选中它！这就是 TextArea 的“高亮”
+                editorArea.positionCaret(index);
+                editorArea.selectRange(index, index + query.length());
+            }
+        }
+
+        // 无论选中与否，都要更新计数标签
+        updateMatchStatus(false);
+    }
 }

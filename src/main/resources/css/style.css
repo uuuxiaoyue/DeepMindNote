@@ -91,8 +91,7 @@
     -fx-padding: 0;            /* 关键：去掉容器留白 */
     -fx-spacing: 0;            /* 关键：去掉默认间距，改用按钮自身的 padding 控制 */
     -fx-alignment: CENTER_LEFT;
-    -fx-min-height: 35px;      /* 设定一个标准高度 */
-
+    -fx-min-height: 35px;
     -fx-background-color: -color-bg-header;
     -fx-border-color: transparent transparent -color-border transparent;
 }
@@ -207,7 +206,6 @@
     -fx-text-fill: -color-text-main;
     -fx-background-color: transparent;
     -fx-display-caret: true;
-    -fx-font-family: 'Consolas', 'Monospaced', 'Courier New';
     -fx-font-size: 14px;
 }
 .text-area .content {
