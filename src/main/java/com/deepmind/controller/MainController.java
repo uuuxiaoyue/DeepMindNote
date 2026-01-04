@@ -67,28 +67,49 @@ public class MainController {
     @FXML
     public void initialize() {
         FileUtil.initStorage();
-
         refreshFileTree();
         setupTreeSelection();
         setupContextMenu();
-
         setupSearch();
         setupOutline();
         setupWordCount();
-
-        showRandomReview();
         showWelcomePage();
-
         initContextMenu();         // 编辑区的右键菜单
         initFileTreeContextMenu(); // 文件树的右键菜单
-
         setupTreeSelection();
-
         setupDragAndDrop();
         setupDualDragAndDrop();
         setupPasteLogic();
-
         setupFindFeature();
+
+        // 1. 点击 WebView 进入编辑模式
+        webView.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 1) {
+                showEditor(true);
+            }
+        });
+
+        // 2. TextArea 失去焦点时自动回到预览模式并保存
+        editorArea.focusedProperty().addListener((obs, oldVal, newVal) -> {
+            if (!newVal) {
+                // 稍微延迟，判断焦点是否真的离开了整个编辑区
+                javafx.application.Platform.runLater(() -> {
+                    if (editorArea.isVisible()) {
+                        showEditor(false); // 切回预览模式
+                    }
+                });
+            }
+        });
+        editorArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                if (handleAutoList()) {
+                    event.consume(); // 拦截原生回车，使用我们自定义的换行逻辑
+                }
+            }
+        });
+
+        // 默认显示预览模式
+        showEditor(false);
     }
 
     /**
@@ -286,69 +307,55 @@ public class MainController {
 
     @FXML
     private void handleNewNote() {
-        // 1. 智能判断分类前缀 (保留你原有的逻辑)
+        // 1. 确定分类前缀
         TreeItem<String> selected = fileTree.getSelectionModel().getSelectedItem();
-        String categoryPrefix = ""; // 默认改为空字符串，表示根目录
+        String categoryPrefix = "";
 
         if (selected != null) {
             String val = selected.getValue();
             java.io.File f = new java.io.File("notes/" + val + ".md");
 
             if (f.exists() && f.isFile()) {
-                // 选中了笔记 -> 取父节点名字作为分类前缀
-                if (selected.getParent() != null && !selected.getParent().getValue().equals("Root")) {
+                // 选中了笔记 -> 取父节点
+                if (selected.getParent() != null && selected.getParent().getParent() != null) {
                     categoryPrefix = selected.getParent().getValue() + "_";
                 }
             } else {
-                // 选中了文件夹 -> 直接用这个文件夹的名字
-                if (!val.equals("Root")) {
+                // 选中了文件夹
+                if (selected.getParent() != null) { // 排除 Root 本身
                     categoryPrefix = val + "_";
                 }
             }
         }
 
-        // 2. 弹出对话框让用户命名 (替换掉原本自动生成的计数逻辑)
-        String displayPrefix = categoryPrefix.isEmpty() ? "根目录" : categoryPrefix.replace("_", "");
-        TextInputDialog dialog = new TextInputDialog("新笔记");
-        dialog.setTitle("新建笔记");
-        dialog.setHeaderText("创建位置: " + displayPrefix);
-        dialog.setContentText("请输入笔记名称:");
+        // 2. 自动生成一个不冲突的文件名 (新笔记, 新笔记1, 新笔记2...)
+        String baseName = "新笔记";
+        String pureName = baseName;
+        String fullFileName = categoryPrefix + pureName;
 
-        // 这一步是为了在 lambda 表达式中使用
-        final String finalPrefix = categoryPrefix;
-
-        dialog.showAndWait().ifPresent(fileName -> {
-            String pureName = fileName.trim();
-            if (pureName.isEmpty()) return;
-
-            // 检查文件名是否包含非法字符（如下划线，因为它会干扰分类逻辑）
-            if (pureName.contains("_")) {
-                showError("命名无效", "笔记名称中请不要包含下划线 '_'。");
-                return;
+        try {
+            List<String> existingFiles = FileUtil.listAllNotes();
+            int count = 1;
+            // 循环检查，直到找到一个不重复的名字
+            while (existingFiles.contains(fullFileName)) {
+                pureName = baseName + count;
+                fullFileName = categoryPrefix + pureName;
+                count++;
             }
 
-            String fullFileName = finalPrefix + pureName;
+            // 3. 执行创建逻辑
             String initialContent = "# " + pureName;
+            FileUtil.save(fullFileName, initialContent);
 
-            try {
-                // 检查重名
-                List<String> existingFiles = FileUtil.listAllNotes();
-                if (existingFiles.contains(fullFileName)) {
-                    showError("创建失败", "当前分类下已存在同名笔记。");
-                    return;
-                }
+            // 4. UI 刷新与聚焦
+            refreshFileTree();
 
-                // 3. 执行创建并跳转 (保留你原有的刷新和聚焦逻辑)
-                FileUtil.save(fullFileName, initialContent);
-                refreshFileTree();
+            // 自动跳转并进入编辑状态，选中标题文字
+            selectAndFocusNewNote(fullFileName, pureName);
 
-                // 注意：这里确保调用你原有的 selectAndFocusNewNote 方法
-                selectAndFocusNewNote(fullFileName, pureName);
-
-            } catch (IOException e) {
-                showError("创建失败", e.getMessage());
-            }
-        });
+        } catch (IOException e) {
+            showError("创建失败", e.getMessage());
+        }
     }
 
     /**
@@ -454,46 +461,34 @@ public class MainController {
     private void handleSave() {
         if (currentNoteTitle == null || currentNoteTitle.isEmpty()) return;
         try {
-            FileUtil.save(currentNoteTitle, editorArea.getText());
-            List<String> moods = List.of("😊 豁然开朗", "😐 平静如水", "😫 烧脑痛苦", "🧠 深度思考");
-            ChoiceDialog<String> dialog = new ChoiceDialog<>("😐 平静如水", moods);
-            dialog.setTitle("保存成功");
-            dialog.setHeaderText("记录一下此时的心境");
-            dialog.setContentText("心情状态:");
+            // 1. 获取原始文本（包含换行、图片等所有信息）
+            String content = editorArea.getText();
+            if (content == null) content = "";
 
-            dialog.showAndWait().ifPresent(selectedMood -> {
-                NoteMetadata meta = FileUtil.readMetadata(currentNoteTitle);
-                meta.title = currentNoteTitle;
-                meta.lastMood = selectedMood;
-                meta.nextReviewDate = java.time.LocalDate.now().plusDays(3).toString();
-                try {
-                    FileUtil.saveMetadata(currentNoteTitle, meta);
-                    wordCountLabel.setText("字数: " + editorArea.getText().length() + " | 最近心情: " + selectedMood);
-                } catch (IOException e) { e.printStackTrace(); }
-            });
-        } catch (IOException e) { e.printStackTrace(); }
+            // 2. 核心保存：直接存入文件
+            FileUtil.save(currentNoteTitle, content);
+
+            // 3. 更新 UI 状态（逻辑必须与 setupWordCount 完全一致）
+            // 过滤图片语法
+            String filtered = content.replaceAll("!\\[.*?\\]\\(.*?\\)", "");
+            // 过滤所有空白字符
+            int count = filtered.replaceAll("\\s", "").length();
+
+            wordCountLabel.setText("字数: " + count);
+
+            System.out.println("已保存: " + currentNoteTitle);
+
+        } catch (IOException e) {
+            // 这里的错误提示非常重要
+            System.err.println("保存笔记失败: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @FXML
     private void handleEditMode() {
-        if (editorArea.isVisible()) {
-            // --- 切换到预览模式 ---
-            updatePreview(); // 先渲染内容
-            editorArea.setVisible(false);
-            editorArea.setManaged(false); // 这一行很重要：让它不占用布局空间
-
-            webView.setVisible(true);
-            webView.setManaged(true);
-            webView.requestFocus();
-        } else {
-            // --- 切换到编辑模式 ---
-            webView.setVisible(false);
-            webView.setManaged(false);
-
-            editorArea.setVisible(true);
-            editorArea.setManaged(true);
-            editorArea.requestFocus(); // 回到编辑模式必须强行拿回焦点
-        }
+        // 逻辑：如果当前在看编辑框，就传 false (去预览)；否则传 true (去编辑)
+        showEditor(!editorArea.isVisible());
     }
 
     @FXML
@@ -505,6 +500,7 @@ public class MainController {
 
     private void updatePreview() {
         String mdContent = editorArea.getText();
+        if (mdContent == null) mdContent = "";
         // 1. 解析 Markdown
         String markdownHtml = MarkdownParser.parse(mdContent);
 
@@ -659,27 +655,21 @@ public class MainController {
 
     private void setupWordCount() {
         editorArea.textProperty().addListener((observable, oldValue, newValue) -> {
-            if (newValue == null) { wordCountLabel.setText("字数: 0"); return; }
-            wordCountLabel.setText("字数: " + newValue.length());
-        });
-    }
-
-    private void showRandomReview() {
-        try {
-            List<String> all = FileUtil.listAllNotes();
-            if (all.isEmpty()) return;
-            String randomTitle = all.get((int) (Math.random() * all.size()));
-            NoteMetadata meta = FileUtil.readMetadata(randomTitle);
-            if ("😫 烧脑痛苦".equals(meta.lastMood)) {
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("复习提醒");
-                alert.setHeaderText("你之前记录这篇笔记时感到很辛苦...");
-                alert.setContentText("要不要回顾一下 [" + randomTitle + "]？");
-                alert.show();
+            if (newValue == null || newValue.isEmpty()) {
+                wordCountLabel.setText("字数: 0");
+                return;
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+
+            // 1. 过滤 Markdown 图片语法: ! [描述] (链接)
+            // 这个正则会匹配以 ! 开头，紧跟 [] 和 () 的内容并将其替换为空字符串
+            String filtered = newValue.replaceAll("!\\[.*?\\]\\(.*?\\)", "");
+
+            // 2. 过滤所有空白字符（空格、制表符、换行符）
+            // \\s 包含所有看不见的空白
+            int count = filtered.replaceAll("\\s", "").length();
+
+            wordCountLabel.setText("字数: " + count);
+        });
     }
 
     /**
@@ -2061,6 +2051,58 @@ public class MainController {
 
     @FXML private void handleUnorderedList() { insertAtLineStart("-"); }
     @FXML private void handleOrderedList() { insertAtLineStart("1."); }
+    private void insertListMarker(String marker) {
+        int caretPos = editorArea.getCaretPosition();
+        int lineStart = getLineStartPosition(caretPos);
+
+        editorArea.insertText(lineStart, marker);
+    }
+    private boolean handleAutoList() {
+        int caretPos = editorArea.getCaretPosition();
+        String text = editorArea.getText();
+
+        // 1. 获取当前行内容
+        int start = getLineStartPosition(caretPos);
+        int end = caretPos;
+        String currentLine = text.substring(start, end);
+
+        // 2. 判断是否有序列表 (匹配 "数字. ")
+        java.util.regex.Pattern orderedPattern = java.util.regex.Pattern.compile("^(\\d+)\\.\\s.*");
+        java.util.regex.Matcher orderedMatcher = orderedPattern.matcher(currentLine);
+
+        if (orderedMatcher.find()) {
+            // 如果当前行只有 "1. " 且用户按回车，说明想结束列表
+            if (currentLine.trim().matches("^\\d+\\.$")) {
+                editorArea.replaceText(start, end, ""); // 清空当前行标志
+                return false;
+            }
+            // 获取当前数字并自增
+            int currentNum = Integer.parseInt(orderedMatcher.group(1));
+            String nextMarker = "\n" + (currentNum + 1) + ". ";
+            editorArea.insertText(caretPos, nextMarker);
+            return true;
+        }
+
+        // 3. 判断是否无序列表 (匹配 "- ")
+        if (currentLine.startsWith("- ")) {
+            // 如果只有 "- " 就按回车，结束列表
+            if (currentLine.trim().equals("-")) {
+                editorArea.replaceText(start, end, "");
+                return false;
+            }
+            editorArea.insertText(caretPos, "\n- ");
+            return true;
+        }
+
+        return false;
+    }
+
+    // 辅助方法：获取行首位置
+    private int getLineStartPosition(int caretPos) {
+        String text = editorArea.getText();
+        int lastNewLine = text.lastIndexOf('\n', caretPos - 1);
+        return (lastNewLine == -1) ? 0 : lastNewLine + 1;
+    }
 //    @FXML private void handleTaskList() { insertAtLineStart("- [ ]"); }
     @FXML private void handleBlockquote() { insertAtLineStart(">"); }
 
@@ -2105,4 +2147,51 @@ public class MainController {
         // 无论选中与否，都要更新计数标签
         updateMatchStatus(false);
     }
+
+   //代码块
+   @FXML
+   private void handleCodeBlock() {
+       // 如果还没进入编辑模式，强制进入
+       if (!editorArea.isVisible()) {
+           showEditor(true);
+       }
+
+       String selectedText = editorArea.getSelectedText();
+       int caretPos = editorArea.getCaretPosition();
+
+       if (selectedText.isEmpty()) {
+           // 插入空代码块，并将光标放在中间行
+           editorArea.insertText(caretPos, "```\n\n```");
+           editorArea.positionCaret(caretPos + 4);
+       } else {
+           // 包裹选中的文字
+           editorArea.replaceSelection("```\n" + selectedText + "\n```");
+       }
+   }
+
+    /**
+     * 切换编辑和预览状态
+     * @param editMode true: 进入编辑(TextArea), false: 进入预览(WebView)
+     */
+    private void showEditor(boolean editMode) {
+        if (editorArea.isVisible() == editMode) return;
+
+        editorArea.setVisible(editMode);
+        editorArea.setManaged(editMode);
+        webView.setVisible(!editMode);
+        webView.setManaged(!editMode);
+
+        if (editMode) {
+            editorArea.requestFocus();
+        } else {
+            // 进入预览模式
+            updatePreview(); // 调用刚才修好的这个方法
+            try {
+                handleSave();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
 }

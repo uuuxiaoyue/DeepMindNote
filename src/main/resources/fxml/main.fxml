@@ -118,7 +118,6 @@
 
     </HBox>
 
-
     <SplitPane fx:id="splitPane" dividerPositions="0.2, 0.8" style="-fx-background-color: -color-bg-base;"
                VBox.vgrow="ALWAYS">
         <VBox fx:id="sidebarContainer" maxWidth="400" minWidth="0" spacing="10" styleClass="sidebar">
@@ -207,7 +206,7 @@
                     </graphic>
                 </ToggleButton>
 
-                <Button onAction="#handleEditMode" styleClass="status-btn" text="&lt;/&gt;">
+                <Button onAction="#handleEditMode" styleClass="status-btn"  focusTraversable="false" text="&lt;/&gt;">
                     <tooltip>
                         <Tooltip text="启用源代码模式"/>
                     </tooltip>
@@ -222,8 +221,6 @@
                         <Tooltip text="展开/关闭大纲栏"/>
                     </tooltip>
                 </ToggleButton>
-
-
             </HBox>
         </VBox>
 
@@ -235,5 +232,4 @@
             <ListView fx:id="outlineListView" VBox.vgrow="ALWAYS"/>
         </VBox>
     </SplitPane>
-
-</VBox>
+        </VBox>
