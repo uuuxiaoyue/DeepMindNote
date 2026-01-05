@@ -53,6 +53,9 @@ public class MainController {
     private String currentNoteTitle = "";
     private double lastDividerPosition = 0.2;
 
+    // 用于在 Editor -> Preview 切换时传递滚动位置
+    private double pendingScrollRatio = -1;
+
     //关于查找和搜索
     private int lastSideSearchIndex = 0;
     @FXML
@@ -99,17 +102,7 @@ public class MainController {
             }
         });
 
-        // 2. TextArea 失去焦点时自动回到预览模式并保存
-        editorArea.focusedProperty().addListener((obs, oldVal, newVal) -> {
-            if (!newVal) {
-                // 稍微延迟，判断焦点是否真的离开了整个编辑区
-                javafx.application.Platform.runLater(() -> {
-                    if (editorArea.isVisible()) {
-                        showEditor(false); // 切回预览模式
-                    }
-                });
-            }
-        });
+
         editorArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.getCode() == KeyCode.ENTER) {
                 if (handleAutoList()) {
@@ -655,14 +648,14 @@ public class MainController {
                                             // 获取页面中所有的标题标签 (h1 到 h6)
                                             // querySelectorAll 返回的顺序就是文档中的出现顺序
                                             const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                                           \s
                                             if (headers[index]) {
                                                 headers[index].scrollIntoView({behavior: "smooth", block: "start"});
-                                               \s
                                                 // 可选：给标题加个临时的闪烁效果，提示用户跳到了这里
                                                 headers[index].style.transition = "background-color 0.5s";
                                                 const originalBg = headers[index].style.backgroundColor;
-                                                headers[index].style.backgroundColor = "#fff3cd"; // 浅黄色
+                                                
+                                                headers[index].style.backgroundColor = "var(--flash-bg)";
+                                                
                                                 setTimeout(() => {
                                                     headers[index].style.backgroundColor = originalBg;
                                                 }, 1000);
@@ -685,13 +678,44 @@ public class MainController {
                 + "</body>"
                 + "</html>";
 
-        // 6. 加载内容 (在 UI 线程执行)
+// 6. 加载内容 (在 UI 线程执行)
         javafx.application.Platform.runLater(() -> {
             webView.getEngine().loadContent(fullHtml);
 
-            // 7. 处理搜索高亮同步
+            // --- 【修复后的滚动逻辑】 ---
+            if (pendingScrollRatio >= 0) {
+                final double ratio = pendingScrollRatio; // 复制一份给内部用
+
+                // 稍微加长一点延迟，确保图片占位符已经渲染，高度计算才准确
+                javafx.animation.Timeline scrollDelay = new javafx.animation.Timeline(
+                        new javafx.animation.KeyFrame(javafx.util.Duration.millis(150), e -> {
+
+                            // 1. 掐头去尾：如果在顶部或底部，直接锁死，不要计算
+                            if (ratio <= 0.05) {
+                                webView.getEngine().executeScript("window.scrollTo(0, 0);");
+                            }
+                            else if (ratio >= 0.95) {
+                                webView.getEngine().executeScript("window.scrollTo(0, document.body.scrollHeight);");
+                            }
+                            else {
+                                // 2. 中间部分：精确计算 (总高 - 视口) * 比例
+                                String script = """
+                        var h = document.documentElement.scrollHeight || document.body.scrollHeight;
+                        var v = document.documentElement.clientHeight || document.body.clientHeight;
+                        window.scrollTo(0, (h - v) * %f);
+                    """.formatted(ratio);
+                                webView.getEngine().executeScript(script);
+                            }
+                            webView.setOpacity(1);
+                            pendingScrollRatio = -1; // 重置
+                        })
+                );
+                scrollDelay.play();
+            }
+            // --- 【新增逻辑结束】 ---
+
+            // 7. 处理搜索高亮同步 (原有逻辑保持不变)
             if (editorFindPane != null && editorFindPane.isVisible() && !editorFindField.getText().isEmpty()) {
-                // 使用 JavaFX 的延迟器代替 android 的 Handler
                 javafx.animation.Timeline timeline = new javafx.animation.Timeline(
                         new javafx.animation.KeyFrame(javafx.util.Duration.millis(150), e -> updateMatchStatus(true))
                 );
@@ -2698,24 +2722,92 @@ public class MainController {
      * 切换编辑和预览状态
      * @param editMode true: 进入编辑(TextArea), false: 进入预览(WebView)
      */
+    //private void showEditor(boolean editMode) {
+    //    if (editorArea.isVisible() == editMode) return;
+    //
+    //    editorArea.setVisible(editMode);
+    //    editorArea.setManaged(editMode);
+    //    webView.setVisible(!editMode);
+    //    webView.setManaged(!editMode);
+    //
+    //    if (editMode) {
+    //        editorArea.requestFocus();
+    //    } else {
+    //        // 进入预览模式
+    //        updatePreview(); // 调用刚才修好的这个方法
+    //        try {
+    //            handleSave();
+    //        } catch (Exception e) {
+    //            e.printStackTrace();
+    //        }
+    //    }
+    //}
+    /**
+     * 切换编辑和预览状态（修复跳变版）
+     */
     private void showEditor(boolean editMode) {
         if (editorArea.isVisible() == editMode) return;
 
+        // === 1. 记录当前位置比例 (0.0 ~ 1.0) ===
+        double currentRatio = 0;
+
+        if (editorArea.isVisible()) {
+            // A. 编辑器 -> 预览
+            ScrollBar vBar = (ScrollBar) editorArea.lookup(".scroll-bar:vertical");
+            if (vBar != null && vBar.getMax() > 0) {
+                // value 是当前滚动的像素，max 是可滚动的最大像素
+                currentRatio = vBar.getValue() / vBar.getMax();
+            }
+        } else if (webView.isVisible()) {
+            // B. 预览 -> 编辑器
+            try {
+                // 获取：scrollTop(已滚动的距离), scrollHeight(总高度), clientHeight(视口高度)
+                int scrollTop = (Integer) webView.getEngine().executeScript("document.documentElement.scrollTop || document.body.scrollTop");
+                int scrollHeight = (Integer) webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
+                int clientHeight = (Integer) webView.getEngine().executeScript("document.documentElement.clientHeight || document.body.clientHeight");
+
+                // 核心修复：分母必须是 (总高度 - 视口高度)
+                // 比如总高1000，视口800，其实你只能滚200。如果你滚了100，那就是50%。
+                int maxScrollable = scrollHeight - clientHeight;
+
+                if (maxScrollable > 0) {
+                    currentRatio = (double) scrollTop / maxScrollable;
+                } else {
+                    currentRatio = 0; // 内容还没屏幕高，就在顶部
+                }
+            } catch (Exception e) {
+                currentRatio = 0;
+            }
+        }
+
+        // === 2. 切换界面 ===
         editorArea.setVisible(editMode);
         editorArea.setManaged(editMode);
         webView.setVisible(!editMode);
         webView.setManaged(!editMode);
 
+        // === 3. 恢复位置 ===
         if (editMode) {
+            // ---> 切回编辑器
             editorArea.requestFocus();
+            final double targetRatio = currentRatio;
+
+            // 延迟执行，等待布局完成
+            javafx.application.Platform.runLater(() -> {
+                ScrollBar vBar = (ScrollBar) editorArea.lookup(".scroll-bar:vertical");
+                if (vBar != null) {
+                    // 掐头去尾：如果在最上面或最下面，强制吸附
+                    if (targetRatio <= 0.05) vBar.setValue(0);
+                    else if (targetRatio >= 0.95) vBar.setValue(vBar.getMax());
+                    else vBar.setValue(targetRatio * vBar.getMax());
+                }
+            });
         } else {
-            // 进入预览模式
-            updatePreview(); // 调用刚才修好的这个方法
-            try {
-                handleSave();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            // ---> 切回预览
+            try { handleSave(); } catch (Exception e) {}
+            pendingScrollRatio = currentRatio; // 存起来给 updatePreview 用
+            webView.setOpacity(0);
+            updatePreview();
         }
     }
 
@@ -3233,197 +3325,107 @@ DeepMind Note 拥有强大的图片管理功能：
      * 【新方法】根据当前 JavaFX 主题获取对应的 WebView CSS 样式
      * 颜色值与 style.css 严格对应
      */
+
     private String getThemeRenderCss() {
-        // 检测当前容器的样式类
         boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
         boolean isGreen = rootContainer.getStyleClass().contains("theme-green");
         boolean isOrange = rootContainer.getStyleClass().contains("theme-orange");
 
-        // 颜色定义
+        // === 变量声明 ===
         String bgColor, mainTextColor, linkColor;
         String selectionBg, selectionText;
-        // 代码块颜色
         String blockCodeBg, blockCodeColor;
         String inlineCodeBg, inlineCodeText, inlineCodeBorder;
-        // 表格颜色
         String tableHeaderBg, tableBorderColor, tableRowHover;
         String quoteBorder, quoteText;
 
         if (isDark) {
-            // === 暗黑模式 (护眼微调) ===
+            // === 暗夜黑 ===
             bgColor = "#1e1f22";
-            mainTextColor = "#d1d5db";      // [改] 云母灰 (约85%白)，不再刺眼
-            linkColor = "#58a6ff";          // 柔和蓝
-
-            // 代码块 (大块)
-            blockCodeBg = "#26292e";        // 深灰背景
-            blockCodeColor = "#c9d1d9";
-
-            // 行内代码 (小块，如 `java`) - [改] 变为深色，不再是白色方块
-            inlineCodeBg = "rgba(110, 118, 129, 0.4)";
-            inlineCodeText = "#e6edf3";
-            inlineCodeBorder = "rgba(240, 246, 252, 0.15)";
-
-            // 选中色
-            selectionBg = "#264f78";
-            selectionText = "#ffffff";
-
-            // 表格 - [改] 现代化深色表格
-            tableHeaderBg = "#2d333b";      // 深色表头
-            tableBorderColor = "#30363d";   // 极淡边框
-            tableRowHover = "#282c34";      // 鼠标悬停高亮
-
-            quoteBorder = "#3b434b";
-            quoteText = "#8b949e";
+            mainTextColor = "#d1d5db";
+            linkColor = "#58a6ff";
+            blockCodeBg = "#26292e"; blockCodeColor = "#c9d1d9";
+            inlineCodeBg = "rgba(110, 118, 129, 0.4)"; inlineCodeText = "#e6edf3"; inlineCodeBorder = "rgba(240, 246, 252, 0.15)";
+            selectionBg = "#264f78"; selectionText = "#ffffff";
+            tableHeaderBg = "#2d333b"; tableBorderColor = "#30363d"; tableRowHover = "#282c34";
+            quoteBorder = "#3b434b"; quoteText = "#8b949e";
+        } else if (isGreen) {
+            // === 森系绿 ===
+            bgColor = "#fcfdfc";
+            mainTextColor = "#2c3e50";
+            linkColor = "#42b983";
+            blockCodeBg = "#f1f8f6"; blockCodeColor = "#2c3e50";
+            inlineCodeBg = "rgba(66, 185, 131, 0.12)"; inlineCodeText = "#244f3b"; inlineCodeBorder = "rgba(66, 185, 131, 0.2)";
+            selectionBg = "#a8e6cf"; selectionText = "#1b4d3e"; // 绿色高亮
+            tableHeaderBg = "#e8f5e9"; tableBorderColor = "#c8e6c9"; tableRowHover = "#f1f8e9";
+            quoteBorder = "#a5d6a7"; quoteText = "#587c65";
+        } else if (isOrange) {
+            // === 暖阳橙 ===
+            bgColor = "#fffdf9";
+            mainTextColor = "#5d4037";
+            linkColor = "#fb8c00";
+            blockCodeBg = "#fff8e1"; blockCodeColor = "#5d4037";
+            inlineCodeBg = "rgba(255, 167, 38, 0.15)"; inlineCodeText = "#6d4c41"; inlineCodeBorder = "rgba(255, 167, 38, 0.25)";
+            selectionBg = "#ffe0b2"; selectionText = "#3e2723"; // 橙色高亮
+            tableHeaderBg = "#fff3e0"; tableBorderColor = "#ffe0b2"; tableRowHover = "#fff8e1";
+            quoteBorder = "#ffcc80"; quoteText = "#8d6e63";
         } else {
-            // ... (其他浅色主题保持默认逻辑，此处为节省篇幅简写，实际请保留你原有的浅色逻辑)
-            // 默认兜底 (浅色)
-            bgColor = "#ffffff"; mainTextColor = "#24292f"; linkColor = "#0969da";
+            // === 默认 (蓝色) ===
+            bgColor = "#ffffff";
+            mainTextColor = "#24292f";
+            linkColor = "#0969da";
             blockCodeBg = "#f6f8fa"; blockCodeColor = "#24292f";
             inlineCodeBg = "rgba(175, 184, 193, 0.2)"; inlineCodeText = "#24292f"; inlineCodeBorder = "rgba(175, 184, 193, 0.2)";
-            selectionBg = "#cce5ff"; selectionText = "#004085";
+            selectionBg = "#cce5ff"; selectionText = "#004085"; // 蓝色高亮
             tableHeaderBg = "#f6f8fa"; tableBorderColor = "#d0d7de"; tableRowHover = "#f2f2f2";
             quoteBorder = "#dfe2e5"; quoteText = "#57606a";
-            if (isGreen) { /* 这里可以填入你之前的绿色逻辑 */ }
-            if (isOrange) { /* 这里可以填入你之前的橙色逻辑 */ }
         }
 
-        // 返回构建好的 CSS
+        // 构建 CSS，注意 %3$s 被赋值给了 --flash-bg
         return String.format("""
-            /* 全局基础 */
-            body {
-                background-color: %1$s;
-                color: %2$s !important;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Helvetica, Arial, sans-serif;
-                font-size: 15px;
-                line-height: 1.6;
-                padding: 20px 30px; /* 增加左右留白 */
-                margin: 0;
-            }
+        body {
+            --flash-bg: %3$s;  /* 【关键】将 Java 的选中色传给 CSS 变量 */
+            background-color: %1$s;
+            color: %2$s !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Helvetica, Arial, sans-serif;
+            font-size: 15px;
+            line-height: 1.6;
+            padding: 20px 30px;
+            margin: 0;
+        }
+        h1, h2, h3, h4, h5, h6 { color: %2$s !important; font-weight: 600; margin-top: 24px; margin-bottom: 16px; line-height: 1.25; }
+        h1, h2 { border-bottom: 1px solid %11$s; padding-bottom: 0.3em; }
+        a { color: %5$s; text-decoration: none; transition: all 0.2s; }
+        a:hover { text-decoration: underline; opacity: 0.8; }
+        blockquote { border-left: 4px solid %13$s; margin: 0 0 16px 0; padding: 0 1em; color: %14$s !important; opacity: 0.9; }
+        
+        /* 表格 */
+        table { border-spacing: 0; border-collapse: collapse; width: 100%%; margin: 16px 0; font-size: 14px; border-radius: 6px; overflow: hidden; border: 1px solid %11$s; }
+        th { background-color: %10$s !important; color: %2$s !important; font-weight: 600; text-align: left; padding: 10px 13px; border-bottom: 1px solid %11$s; border-right: 1px solid %11$s; }
+        th:last-child { border-right: none; }
+        td { padding: 10px 13px; border-bottom: 1px solid %11$s; border-right: 1px solid %11$s; color: %2$s !important; }
+        td:last-child { border-right: none; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: %12$s; }
 
-            /* 标题：稍微亮一点，形成层级 */
-            h1, h2, h3, h4, h5, h6 {
-                color: %2$s !important; /* 继承主色，或者稍微调亮 */
-                font-weight: 600;
-                margin-top: 24px;
-                margin-bottom: 16px;
-                line-height: 1.25;
-            }
-            h1, h2 { border-bottom: 1px solid %11$s; padding-bottom: 0.3em; } /* 标题下加条淡线 */
-
-            /* 链接 */
-            a { color: %5$s; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-
-            /* 引用块 */
-            blockquote {
-                border-left: 4px solid %13$s;
-                margin: 0 0 16px 0;
-                padding: 0 1em;
-                color: %14$s !important;
-            }
-
-            /* === 现代化表格设计 (重点修改) === */
-            table {
-                border-spacing: 0;
-                border-collapse: collapse;
-                width: 100%%;
-                margin: 16px 0;
-                font-size: 14px;
-                border-radius: 6px;       /* 圆角 */
-                overflow: hidden;         /* 配合圆角 */
-                border: 1px solid %11$s;  /* 外框 */
-            }
-            
-            /* 表头：深色背景，不再是白色 */
-            th {
-                background-color: %10$s !important; 
-                color: %2$s !important;
-                font-weight: 600;
-                text-align: left;
-                padding: 10px 13px;
-                border-bottom: 1px solid %11$s; /* 只留底边框 */
-                border-right: 1px solid %11$s;  /* 竖线 */
-            }
-            th:last-child { border-right: none; }
-
-            /* 单元格 */
-            td {
-                padding: 10px 13px;
-                border-bottom: 1px solid %11$s; /* 横向分割线 */
-                border-right: 1px solid %11$s;  /* 竖向分割线 */
-                color: %2$s !important;
-            }
-            td:last-child { border-right: none; }
-            
-            /* 去除最后一行底边框 */
-            tr:last-child td { border-bottom: none; }
-
-            /* 隔行变色 (斑马纹) - 极淡 */
-            tr:nth-child(even) { background-color: rgba(127, 127, 127, 0.02); }
-            /* 悬停高亮 */
-            tr:hover { background-color: %12$s; }
-
-
-            /* === 代码块 (Pre) === */
-            pre {
-                background-color: %6$s;
-                color: %7$s;
-                padding: 16px;
-                border-radius: 6px;
-                overflow-x: auto;
-                font-family: 'JetBrains Mono', 'Consolas', monospace;
-                font-size: 85%%;
-                line-height: 1.45;
-                border: 1px solid %11$s; /* 微弱边框 */
-            }
-
-            /* === 行内代码 (Code) - 修复“白色补丁”问题 === */
-            code {
-                background-color: %8$s !important; /* 半透明深灰 */
-                color: %9$s !important;            /* 亮灰文字 */
-                border: 1px solid %15$s;           /* 极淡描边 */
-                font-family: 'JetBrains Mono', 'Consolas', monospace;
-                padding: 0.2em 0.4em;
-                margin: 0;
-                font-size: 85%%;
-                border-radius: 4px;
-            }
-            /* 避免 pre 里的 code 重复样式 */
-            pre code {
-                background-color: transparent !important;
-                color: inherit !important;
-                padding: 0;
-                border: none;
-                font-size: 100%%;
-            }
-
-            /* 选中效果 */
-            ::selection { background-color: %3$s; color: %4$s; }
-            
-            img { max-width: 100%%; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-            
-            /* 滚动条美化 */
-            ::-webkit-scrollbar { width: 10px; height: 10px; }
-            ::-webkit-scrollbar-thumb { background: #555; border-radius: 5px; border: 2px solid %1$s; }
-            ::-webkit-scrollbar-track { background: transparent; }
-            """,
-                // 参数列表
-                bgColor,           // 1. 背景
-                mainTextColor,     // 2. 主文字 (护眼灰)
-                selectionBg,       // 3. 选中背景
-                selectionText,     // 4. 选中文字
-                linkColor,         // 5. 链接
-                blockCodeBg,       // 6. 大代码块背景
-                blockCodeColor,    // 7. 大代码块文字
-                inlineCodeBg,      // 8. 行内代码背景 (修复重点)
-                inlineCodeText,    // 9. 行内代码文字
-                tableHeaderBg,     // 10. 表头背景 (修复重点)
-                tableBorderColor,  // 11. 表格边框 (修复重点)
-                tableRowHover,     // 12. 表格悬停
-                quoteBorder,       // 13. 引用边框
-                quoteText,         // 14. 引用文字
-                inlineCodeBorder   // 15. 行内代码描边
+        /* 代码块 */
+        pre { background-color: %6$s; color: %7$s; padding: 16px; border-radius: 6px; overflow-x: auto; font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 85%%; line-height: 1.45; border: 1px solid %11$s; }
+        code { background-color: %8$s !important; color: %9$s !important; border: 1px solid %15$s; font-family: 'JetBrains Mono', 'Consolas', monospace; padding: 0.2em 0.4em; margin: 0; font-size: 85%%; border-radius: 6px; }
+        pre code { background-color: transparent !important; color: inherit !important; padding: 0; border: none; font-size: 100%%; }
+        
+        /* 选中与图片 */
+        ::selection { background-color: %3$s; color: %4$s; }
+        img { max-width: 100%%; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: 10px 0; }
+        
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(120, 120, 120, 0.4); border-radius: 5px; border: 2px solid %1$s; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        """,
+                bgColor, mainTextColor, selectionBg, selectionText, linkColor,
+                blockCodeBg, blockCodeColor, inlineCodeBg, inlineCodeText,
+                tableHeaderBg, tableBorderColor, tableRowHover,
+                quoteBorder, quoteText, inlineCodeBorder
         );
     }
 
