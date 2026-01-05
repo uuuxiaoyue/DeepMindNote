@@ -83,11 +83,11 @@ public class MainController {
         setupFindFeature();
 
         // 1. 点击 WebView 进入编辑模式
-        webView.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 1) {
-                showEditor(true);
-            }
-        });
+        //webView.setOnMouseClicked(event -> {
+        //    if (event.getClickCount() == 1) {
+        //        showEditor(true);
+        //    }
+        //});
 
         // 2. TextArea 失去焦点时自动回到预览模式并保存
         editorArea.focusedProperty().addListener((obs, oldVal, newVal) -> {
@@ -559,109 +559,200 @@ public class MainController {
         webView.setVisible(true);
     }
 
+    //private void updatePreview() {
+    //    String mdContent = editorArea.getText();
+    //    if (mdContent == null) mdContent = "";
+    //    // 1. 解析 Markdown
+    //    String markdownHtml = MarkdownParser.parse(mdContent);
+    //
+    //    // 2. 检查当前是否是暗色模式
+    //    // (简单的判断方法：看 rootContainer 的样式类里有没有 theme-dark)
+    //    boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
+    //
+    //    // 3. 构建完整的 HTML，注入 CSS 样式
+    //    File notesDir = new File("notes/");
+    //    String baseUrl = notesDir.toURI().toString();
+    //    // 1. removeHighlights(): 清除旧的高亮
+    //    // 2. highlightAll(keyword): 遍历文本节点，给匹配的词加上 <span class="search-highlight">
+    //    String jsScript = """
+    //                <script>
+    //                    // 清除所有高亮标签，还原文本
+    //                    function removeHighlights() {
+    //                        const highlights = document.querySelectorAll('span.search-highlight');
+    //                        highlights.forEach(span => {
+    //                            const parent = span.parentNode;
+    //                            parent.replaceChild(document.createTextNode(span.textContent), span);
+    //                            parent.normalize(); // 合并相邻文本节点
+    //                        });
+    //                    }
+    //
+    //                    // 高亮关键词并返回匹配数量
+    //                    function highlightAll(keyword) {
+    //                        removeHighlights(); // 先清除旧的
+    //                        if (!keyword) return 0;
+    //
+    //                        // 使用 TreeWalker 遍历纯文本节点，避免破坏 HTML 标签结构
+    //                        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+    //                        const nodes = [];
+    //                        while(walk.nextNode()) nodes.push(walk.currentNode);
+    //
+    //                        let count = 0;
+    //                        // 正则：转义特殊字符，gi 表示全局+忽略大小写
+    //                        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+    //                        const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
+    //
+    //                        nodes.forEach(node => {
+    //                            // 跳过 script 和 style 标签内部
+    //                            if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
+    //
+    //                            const text = node.nodeValue;
+    //                            if (regex.test(text)) {
+    //                                const fragment = document.createDocumentFragment();
+    //                                let lastIdx = 0;
+    //
+    //                                text.replace(regex, (match, p1, offset) => {
+    //                                    // 1. 添加匹配前的普通文本
+    //                                    fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
+    //
+    //                                    // 2. 添加高亮节点
+    //                                    const span = document.createElement('span');
+    //                                    span.className = 'search-highlight';
+    //                                    span.textContent = match;
+    //                                    if (count === 0) span.id = 'first-match'; // 标记第一个
+    //                                    fragment.appendChild(span);
+    //
+    //                                    lastIdx = offset + match.length;
+    //                                    count++;
+    //                                });
+    //
+    //                                // 3. 添加剩余文本
+    //                                fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
+    //                                node.parentNode.replaceChild(fragment, node);
+    //                            }
+    //                        });
+    //
+    //                        // 自动滚动到第一个结果
+    //                        const first = document.getElementById('first-match');
+    //                        if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
+    //
+    //                        return count;
+    //                    }
+    //                </script>
+    //            """;
+    //    // 3. 拼接完整的 HTML 结构
+    //    String htmlContent = "<!DOCTYPE html>"
+    //            + "<html>"
+    //            + "<head>"
+    //            + "    <meta charset=\"UTF-8\">"
+    //            // 关键点：告诉 WebView 所有的相对路径(如 images/1.png) 都要去 baseUrl 下面找
+    //            + "    <base href=\"" + baseUrl + "\">"
+    //            + "    <style>"
+    //            + "        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }"
+    //            + "        /* 推荐：限制图片最大宽度，防止图片太大撑破屏幕 */"
+    //            + "        img { max-width: 100%; height: auto; }"
+    //            // --- CSS 高亮样式 ---
+    //            + "    .search-highlight { background-color: #ffeb3b; color: #000; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.2); }"
+    //            + "    </style>"
+    //            + "</head>"
+    //            + "<body>"
+    //            + markdownHtml
+    //            + jsScript // 注入 JS
+    //            + "</body>"
+    //            + "</html>";
+    //    String html = buildHtml(htmlContent, isDark);
+    //    // 4. 加载内容
+    //    webView.getEngine().loadContent(html);
+    //}
+
+    /**
+     * 核心：更新预览区
+     * 1. 解析 Markdown
+     * 2. 获取当前主题 CSS
+     * 3. 注入 JS (高亮支持)
+     * 4. 渲染到 WebView
+     */
     private void updatePreview() {
         String mdContent = editorArea.getText();
         if (mdContent == null) mdContent = "";
-        // 1. 解析 Markdown
+
+        // 1. 解析 Markdown -> HTML 片段
         String markdownHtml = MarkdownParser.parse(mdContent);
 
-        // 2. 检查当前是否是暗色模式
-        // (简单的判断方法：看 rootContainer 的样式类里有没有 theme-dark)
-        boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
+        // 2. 获取当前主题对应的 CSS (核心修改)
+        String themeCss = getThemeRenderCss();
 
-        // 3. 构建完整的 HTML，注入 CSS 样式
+        // 3. 准备 Base URL (用于加载本地图片)
         File notesDir = new File("notes/");
         String baseUrl = notesDir.toURI().toString();
-        // 1. removeHighlights(): 清除旧的高亮
-        // 2. highlightAll(keyword): 遍历文本节点，给匹配的词加上 <span class="search-highlight">
+
+        // 4. 准备 JavaScript (搜索高亮功能，保持不变)
         String jsScript = """
-                    <script>
-                        // 清除所有高亮标签，还原文本
-                        function removeHighlights() {
-                            const highlights = document.querySelectorAll('span.search-highlight');
-                            highlights.forEach(span => {
-                                const parent = span.parentNode;
-                                parent.replaceChild(document.createTextNode(span.textContent), span);
-                                parent.normalize(); // 合并相邻文本节点
+            <script>
+                function removeHighlights() {
+                    const highlights = document.querySelectorAll('span.search-highlight');
+                    highlights.forEach(span => {
+                        const parent = span.parentNode;
+                        parent.replaceChild(document.createTextNode(span.textContent), span);
+                        parent.normalize();
+                    });
+                }
+                function highlightAll(keyword) {
+                    removeHighlights();
+                    if (!keyword) return 0;
+                    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                    const nodes = [];
+                    while(walk.nextNode()) nodes.push(walk.currentNode);
+                    let count = 0;
+                    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+                    const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
+                    nodes.forEach(node => {
+                        if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
+                        const text = node.nodeValue;
+                        if (regex.test(text)) {
+                            const fragment = document.createDocumentFragment();
+                            let lastIdx = 0;
+                            text.replace(regex, (match, p1, offset) => {
+                                fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
+                                const span = document.createElement('span');
+                                span.className = 'search-highlight';
+                                span.textContent = match;
+                                if (count === 0) span.id = 'first-match';
+                                fragment.appendChild(span);
+                                lastIdx = offset + match.length;
+                                count++;
                             });
+                            fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
+                            node.parentNode.replaceChild(fragment, node);
                         }
-                
-                        // 高亮关键词并返回匹配数量
-                        function highlightAll(keyword) {
-                            removeHighlights(); // 先清除旧的
-                            if (!keyword) return 0;
-                
-                            // 使用 TreeWalker 遍历纯文本节点，避免破坏 HTML 标签结构
-                            const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                            const nodes = [];
-                            while(walk.nextNode()) nodes.push(walk.currentNode);
-                
-                            let count = 0;
-                            // 正则：转义特殊字符，gi 表示全局+忽略大小写
-                            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-                            const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
-                
-                            nodes.forEach(node => {
-                                // 跳过 script 和 style 标签内部
-                                if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
-                
-                                const text = node.nodeValue;
-                                if (regex.test(text)) {
-                                    const fragment = document.createDocumentFragment();
-                                    let lastIdx = 0;
-                
-                                    text.replace(regex, (match, p1, offset) => {
-                                        // 1. 添加匹配前的普通文本
-                                        fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
-                
-                                        // 2. 添加高亮节点
-                                        const span = document.createElement('span');
-                                        span.className = 'search-highlight';
-                                        span.textContent = match;
-                                        if (count === 0) span.id = 'first-match'; // 标记第一个
-                                        fragment.appendChild(span);
-                
-                                        lastIdx = offset + match.length;
-                                        count++;
-                                    });
-                
-                                    // 3. 添加剩余文本
-                                    fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
-                                    node.parentNode.replaceChild(fragment, node);
-                                }
-                            });
-                
-                            // 自动滚动到第一个结果
-                            const first = document.getElementById('first-match');
-                            if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
-                
-                            return count;
-                        }
-                    </script>
-                """;
-        // 3. 拼接完整的 HTML 结构
-        String htmlContent = "<!DOCTYPE html>"
+                    });
+                    const first = document.getElementById('first-match');
+                    if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
+                    return count;
+                }
+            </script>
+            """;
+
+        // 5. 组装最终的完整 HTML
+        String fullHtml = "<!DOCTYPE html>"
                 + "<html>"
                 + "<head>"
                 + "    <meta charset=\"UTF-8\">"
-                // 关键点：告诉 WebView 所有的相对路径(如 images/1.png) 都要去 baseUrl 下面找
-                + "    <base href=\"" + baseUrl + "\">"
-                + "    <style>"
-                + "        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }"
-                + "        /* 推荐：限制图片最大宽度，防止图片太大撑破屏幕 */"
-                + "        img { max-width: 100%; height: auto; }"
-                // --- CSS 高亮样式 ---
-                + "    .search-highlight { background-color: #ffeb3b; color: #000; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.2); }"
-                + "    </style>"
+                + "    <base href=\"" + baseUrl + "\">" // 关键：解决图片路径
+                + "    <style>" + themeCss + "</style>"  // 关键：注入动态 CSS
                 + "</head>"
                 + "<body>"
                 + markdownHtml
-                + jsScript // 注入 JS
+                + jsScript
                 + "</body>"
                 + "</html>";
-        String html = buildHtml(htmlContent, isDark);
-        // 4. 加载内容
-        webView.getEngine().loadContent(html);
+
+        // 6. 加载
+        webView.getEngine().loadContent(fullHtml);
+
+        // 7. 如果搜索框有内容，重新触发一次高亮（防止切换视图后高亮消失）
+        if (editorFindPane.isVisible() && !editorFindField.getText().isEmpty()) {
+            javafx.application.Platform.runLater(() -> updateMatchStatus(true));
+        }
     }
 
     private String buildHtml(String bodyContent, boolean isDarkMode) {
@@ -2987,4 +3078,91 @@ DeepMind Note 拥有强大的图片管理功能：
 > 版本：v1.0.0 (Preview)
 > *记录思维，连接未来。*
 """;
+
+    /**
+     * 【新方法】根据当前 JavaFX 主题获取对应的 WebView CSS 样式
+     * 颜色值与 style.css 严格对应
+     */
+    private String getThemeRenderCss() {
+        // 检测当前容器的样式类
+        boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
+        boolean isGreen = rootContainer.getStyleClass().contains("theme-green");
+        boolean isOrange = rootContainer.getStyleClass().contains("theme-orange");
+
+        String bgColor, textColor, linkColor, codeBg, quoteColor;
+
+        if (isDark) {
+            // 暗夜黑
+            bgColor = "#1e1f22";
+            textColor = "#dfe1e5";
+            linkColor = "#589df6";
+            codeBg = "#2b2d30";
+            quoteColor = "#6c757d";
+        } else if (isGreen) {
+            // 森系绿
+            bgColor = "#fcfdfc";
+            textColor = "#2c3e50";
+            linkColor = "#42b983";
+            codeBg = "#f0f9f4"; // 浅绿背景
+            quoteColor = "#7f8c8d";
+        } else if (isOrange) {
+            // 暖阳橙
+            bgColor = "#fffdf9";
+            textColor = "#5d4037";
+            linkColor = "#ff9f43";
+            codeBg = "#fff5e6"; // 浅橙背景
+            quoteColor = "#a1887f";
+        } else {
+            // 默认蓝 (极简白)
+            bgColor = "#ffffff";
+            textColor = "#212529";
+            linkColor = "#3574f0";
+            codeBg = "#f8f9fa";
+            quoteColor = "#6c757d";
+        }
+
+        // 返回构建好的 CSS
+        return String.format("""
+            body {
+                background-color: %s;
+                color: %s;
+                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                font-size: 15px;
+                line-height: 1.7;
+                padding: 20px;
+                margin: 0;
+            }
+            a { color: %s; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+            pre, code {
+                background-color: %s;
+                font-family: 'Consolas', 'Menlo', monospace;
+                border-radius: 4px;
+                padding: 2px 4px;
+                font-size: 0.9em;
+            }
+            pre { padding: 10px; overflow-x: auto; }
+            blockquote {
+                border-left: 4px solid %s;
+                margin: 0;
+                padding-left: 15px;
+                color: %s;
+            }
+            img { max-width: 100%%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
+            /* 搜索高亮样式 */
+            .search-highlight {
+                background-color: #ffeb3b;
+                color: #000;
+                border-radius: 2px;
+                box-shadow: 0 0 2px rgba(0,0,0,0.2);
+            }
+            /* 滚动条样式优化 (Chrome内核) */
+            ::-webkit-scrollbar { width: 8px; height: 8px; }
+            ::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.3); border-radius: 4px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            """,
+                bgColor, textColor, linkColor, codeBg, linkColor, quoteColor
+        );
+    }
+
 }

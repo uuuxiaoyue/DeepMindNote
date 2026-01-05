@@ -434,3 +434,18 @@
 .tree-cell .tree-disclosure-node .arrow {
     -fx-background-color: -fx-text-fill;
 }
+
+/* ================== WebView (预览模式) 修复 ================== */
+
+.web-view {
+    /* 关键属性：设置 WebView 内部页面的默认填充色 */
+    -fx-page-fill: -color-bg-base;
+
+    /* 让 WebView 自身的背景透明，以防万一 */
+    -fx-background-color: transparent;
+}
+
+/* 如果你想让 WebView 里的滚动条也尽量融合（可选） */
+.web-view .scroll-bar {
+    -fx-background-color: transparent;
+}
