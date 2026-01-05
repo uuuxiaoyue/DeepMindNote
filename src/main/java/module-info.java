@@ -21,6 +21,8 @@ module com.deepmind {
     requires flexmark.ext.tables;
     requires flexmark.ext.anchorlink;
     requires java.prefs;
+    requires flexmark.ext.autolink;
+    requires flexmark.util.misc;
 
 
     //允许 Gson 访问你的 util 包进行数据的序列化和反序列化
