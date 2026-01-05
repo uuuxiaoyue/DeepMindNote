@@ -232,7 +232,7 @@
 
                 <Button onAction="#handleEditMode" styleClass="status-btn"  focusTraversable="false" text="&lt;/&gt;">
                     <tooltip>
-                        <Tooltip text="启用源代码模式"/>
+                        <Tooltip text="切换模式"/>
                     </tooltip>
                 </Button>
                 <ToggleButton styleClass="status-toggle" onAction="#toggleOutline" selected="true">

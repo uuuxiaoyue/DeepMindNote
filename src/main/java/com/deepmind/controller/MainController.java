@@ -644,23 +644,41 @@ public class MainController {
                     if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
                     return count;
                 }
-                         function scrollToHeading(index) {
-                                            // 获取页面中所有的标题标签 (h1 到 h6)
-                                            // querySelectorAll 返回的顺序就是文档中的出现顺序
-                                            const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                                            if (headers[index]) {
-                                                headers[index].scrollIntoView({behavior: "smooth", block: "start"});
-                                                // 可选：给标题加个临时的闪烁效果，提示用户跳到了这里
-                                                headers[index].style.transition = "background-color 0.5s";
-                                                const originalBg = headers[index].style.backgroundColor;
-                                                
-                                                headers[index].style.backgroundColor = "var(--flash-bg)";
-                                                
-                                                setTimeout(() => {
-                                                    headers[index].style.backgroundColor = originalBg;
-                                                }, 1000);
-                                            }
-                                        }
+                
+                    // --- 3. 跳转到第 N 个查找结果 (用于 FindNext) ---
+                    function scrollToMatch(index) {
+                         const highlights = document.querySelectorAll('span.search-highlight');
+                         if (highlights.length === 0) return -1;
+                
+                         // 循环逻辑
+                         if (index >= highlights.length) index = 0;
+                         if (index < 0) index = highlights.length - 1;
+                
+                         // 重置颜色
+                         highlights.forEach(span => span.style.backgroundColor = "#ffeb3b"); 
+                
+                         // 选中目标
+                         const target = highlights[index];
+                         target.style.backgroundColor = "#ff9800"; // 橙色选中
+                         target.scrollIntoView({behavior: "smooth", block: "center"});
+                         return index;
+                    }
+                
+                    // --- 4. 跳转到大纲标题 (用于 Outline) ---
+                    function scrollToHeading(index) {
+                        const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                        if (headers[index]) {
+                            headers[index].scrollIntoView({behavior: "smooth", block: "start"});
+                
+                            // 闪烁效果 (直接用具体颜色，防止 var 变量失效)
+                            headers[index].style.transition = "background-color 0.5s";
+                            const originalBg = headers[index].style.backgroundColor;
+                            headers[index].style.backgroundColor = "#fff3cd"; // 浅黄闪烁
+                            setTimeout(() => {
+                                headers[index].style.backgroundColor = originalBg;
+                            }, 1000);
+                        }
+                    }
             </script>
             """;
 
@@ -669,8 +687,12 @@ public class MainController {
                 + "<html>"
                 + "<head>"
                 + "    <meta charset=\"UTF-8\">"
-                + "    <base href=\"" + baseUrl + "\">" // 关键：解决图片路径
-                + "    <style>" + themeCss + "</style>"  // 关键：注入动态 CSS
+                + "    <base href=\"" + baseUrl + "\">"
+                + "    <style>"
+                + themeCss
+                + "        /* 强制高亮样式，确保可见 */"
+                + "        .search-highlight { background-color: #ffeb3b !important; color: #000 !important; }"
+                + "    </style>"
                 + "</head>"
                 + "<body>"
                 + markdownHtml
@@ -678,9 +700,22 @@ public class MainController {
                 + "</body>"
                 + "</html>";
 
-// 6. 加载内容 (在 UI 线程执行)
-        javafx.application.Platform.runLater(() -> {
-            webView.getEngine().loadContent(fullHtml);
+        // 6. 错误监控 (方便调试)
+        webView.getEngine().setOnError(event -> System.err.println("JS Error: " + event.getMessage()));
+
+        // 7. 绑定加载监听器 (这是取代 Timeline 的关键)
+        webView.getEngine().getLoadWorker().stateProperty().removeListener(this::onWebViewLoadStateChanged);
+        webView.getEngine().getLoadWorker().stateProperty().addListener(this::onWebViewLoadStateChanged);
+
+        // 8. 开始加载
+        webView.getEngine().loadContent(fullHtml);
+    }
+
+    /**
+     * WebView 加载状态监听 (只有在这里执行 JS 才是 100% 安全的)
+     */
+    private void onWebViewLoadStateChanged(javafx.beans.value.ObservableValue<? extends javafx.concurrent.Worker.State> obs, javafx.concurrent.Worker.State oldState, javafx.concurrent.Worker.State newState) {
+        if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
 
             // --- 【修复后的滚动逻辑】 ---
             if (pendingScrollRatio >= 0) {
@@ -693,17 +728,15 @@ public class MainController {
                             // 1. 掐头去尾：如果在顶部或底部，直接锁死，不要计算
                             if (ratio <= 0.05) {
                                 webView.getEngine().executeScript("window.scrollTo(0, 0);");
-                            }
-                            else if (ratio >= 0.95) {
+                            } else if (ratio >= 0.95) {
                                 webView.getEngine().executeScript("window.scrollTo(0, document.body.scrollHeight);");
-                            }
-                            else {
+                            } else {
                                 // 2. 中间部分：精确计算 (总高 - 视口) * 比例
                                 String script = """
-                        var h = document.documentElement.scrollHeight || document.body.scrollHeight;
-                        var v = document.documentElement.clientHeight || document.body.clientHeight;
-                        window.scrollTo(0, (h - v) * %f);
-                    """.formatted(ratio);
+                                            var h = document.documentElement.scrollHeight || document.body.scrollHeight;
+                                            var v = document.documentElement.clientHeight || document.body.clientHeight;
+                                            window.scrollTo(0, (h - v) * %f);
+                                        """.formatted(ratio);
                                 webView.getEngine().executeScript(script);
                             }
                             webView.setOpacity(1);
@@ -712,18 +745,17 @@ public class MainController {
                 );
                 scrollDelay.play();
             }
-            // --- 【新增逻辑结束】 ---
 
-            // 7. 处理搜索高亮同步 (原有逻辑保持不变)
+            // --- B. 处理搜索高亮 (如果查找框没关且有字) ---
             if (editorFindPane != null && editorFindPane.isVisible() && !editorFindField.getText().isEmpty()) {
-                javafx.animation.Timeline timeline = new javafx.animation.Timeline(
-                        new javafx.animation.KeyFrame(javafx.util.Duration.millis(150), e -> updateMatchStatus(true))
-                );
-                timeline.play();
+                // 这里 true 表示执行高亮动作
+                updateMatchStatus(true);
             }
-        });
-    }
 
+            // 显示 WebView (防止加载时闪烁)
+            webView.setOpacity(1);
+        }
+    }
     private String buildHtml(String bodyContent, boolean isDarkMode) {
         // 定义颜色
         String bgColor = isDarkMode ? "#1e1f22" : "#ffffff";
@@ -2717,34 +2749,6 @@ public class MainController {
            editorArea.replaceSelection("```\n" + selectedText + "\n```");
        }
    }
-
-    /**
-     * 切换编辑和预览状态
-     * @param editMode true: 进入编辑(TextArea), false: 进入预览(WebView)
-     */
-    //private void showEditor(boolean editMode) {
-    //    if (editorArea.isVisible() == editMode) return;
-    //
-    //    editorArea.setVisible(editMode);
-    //    editorArea.setManaged(editMode);
-    //    webView.setVisible(!editMode);
-    //    webView.setManaged(!editMode);
-    //
-    //    if (editMode) {
-    //        editorArea.requestFocus();
-    //    } else {
-    //        // 进入预览模式
-    //        updatePreview(); // 调用刚才修好的这个方法
-    //        try {
-    //            handleSave();
-    //        } catch (Exception e) {
-    //            e.printStackTrace();
-    //        }
-    //    }
-    //}
-    /**
-     * 切换编辑和预览状态（修复跳变版）
-     */
     private void showEditor(boolean editMode) {
         if (editorArea.isVisible() == editMode) return;
 
