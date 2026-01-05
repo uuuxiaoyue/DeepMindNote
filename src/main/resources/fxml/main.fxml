@@ -112,7 +112,9 @@
                 <RadioMenuItem onAction="#handleThemeMenuAction" text="暖阳橙" toggleGroup="$themeGroup"/>
             </Menu>
             <Menu text="帮助(_H)">
-                <MenuItem text="关于"/>
+                <MenuItem text="用户手册" onAction="#handleOpenHelp"/>
+                <SeparatorMenuItem />
+                <MenuItem text="关于" onAction="#handleAbout"/>
             </Menu>
         </MenuBar>
 
@@ -127,6 +129,28 @@
 
             <HBox alignment="CENTER_RIGHT" spacing="5">
                 <Region HBox.hgrow="ALWAYS"/>
+
+                <Button onAction="#handleExpandAll" styleClass="icon-btn-small">
+                    <tooltip>
+                        <Tooltip text="展开所有文件夹"/>
+                    </tooltip>
+                    <graphic>
+                        <javafx.scene.shape.SVGPath
+                                content="M12 5.83 L15.17 9 L16.58 7.59 L12 3 L7.41 7.59 L8.83 9 L12 5.83 Z M12 18.17 L8.83 15 L7.41 16.41 L12 21 L16.58 16.41 L15.17 15 L12 18.17 Z"
+                                fill="#6c757d" scaleX="0.7" scaleY="0.7"/>
+                    </graphic>
+                </Button>
+
+                <Button onAction="#handleCollapseAll" styleClass="icon-btn-small">
+                    <tooltip>
+                        <Tooltip text="折叠所有文件夹"/>
+                    </tooltip>
+                    <graphic>
+                        <javafx.scene.shape.SVGPath
+                                content="M7.41 18.59 L8.83 20 L12 16.83 L15.17 20 L16.58 18.59 L12 14 L7.41 18.59 Z M16.58 5.41 L15.17 4 L12 7.17 L8.83 4 L7.41 5.41 L12 10 L16.58 5.41 Z"
+                                fill="#6c757d" scaleX="0.7" scaleY="0.7"/>
+                    </graphic>
+                </Button>
 
                 <Button onAction="#handleNewNote" styleClass="icon-btn-small">
                     <tooltip>
@@ -194,7 +218,7 @@
                 <Label fx:id="wordCountLabel" styleClass="text-muted" text="字数: 0"/>
 
                 <Region HBox.hgrow="ALWAYS"/>
-                <ToggleButton fx:id="btnToggleSidebar" onAction="#handleToggleSidebar" prefHeight="0.0" prefWidth="54.0"
+                <ToggleButton fx:id="btnToggleSidebar" styleClass="status-toggle" onAction="#handleToggleSidebar" prefHeight="0.0" prefWidth="54.0"
                               selected="true">
                     <tooltip>
                         <Tooltip text="显示/隐藏侧边栏"/>
@@ -211,7 +235,7 @@
                         <Tooltip text="启用源代码模式"/>
                     </tooltip>
                 </Button>
-                <ToggleButton onAction="#toggleOutline" selected="true">
+                <ToggleButton styleClass="status-toggle" onAction="#toggleOutline" selected="true">
                     <graphic>
                         <SVGPath
                                 content="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M15 4v16"

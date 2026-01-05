@@ -67,9 +67,9 @@ public class MainController {
     @FXML
     public void initialize() {
         FileUtil.initStorage();
+        fileTree.setEditable(true);
         refreshFileTree();
         setupTreeSelection();
-        setupContextMenu();
         setupSearch();
         setupOutline();
         setupWordCount();
@@ -115,53 +115,68 @@ public class MainController {
     /**
      * 核心逻辑：文件树加载
      */
+    /**
+     * 核心逻辑升级：支持无限层级文件夹 (A_B_C_Note.md)
+     */
     private void refreshFileTree() {
         TreeItem<String> root = new TreeItem<>("Root");
-
-        // 我们用一个列表来保存已创建的分类节点，避免重复
-        java.util.Map<String, TreeItem<String>> categoryMap = new java.util.HashMap<>();
-
 
         try {
             List<String> allFiles = FileUtil.listAllNotes();
 
+            // 先按字母排序，保证文件夹顺序一致
+            allFiles.sort(String::compareTo);
+
             for (String fullFileName : allFiles) {
-                String categoryName = "未分类";
-                String noteName = fullFileName;
+                // 1. 分割文件名：使用 "_" 分割，但要处理文件名本身可能不包含 _ 的情况
+                // 例如: "A_B_Note.md" -> ["A", "B", "Note.md"]
+                // 这里的逻辑是：只要不是最后一部分，前面的都当做文件夹
+                String[] parts = fullFileName.split("_");
 
-                // 2. 解析分类：如果文件名包含 "_"，则前面是分类，后面是歌名
-                if (fullFileName.contains("_")) {
-                    String[] parts = fullFileName.split("_", 2);
-                    categoryName = parts[0];
-                    noteName = parts[1]; // 只显示下划线后面的部分
+                TreeItem<String> currentParent = root;
+
+                // 2. 遍历路径构建文件夹 (排除最后一部分，那是文件名)
+                for (int i = 0; i < parts.length - 1; i++) {
+                    String folderName = parts[i];
+                    currentParent = findOrCreateChild(currentParent, folderName);
                 }
 
-                // 3. 获取或创建分类节点
-                TreeItem<String> categoryItem = categoryMap.get(categoryName);
-                if (categoryItem == null) {
-                    categoryItem = new TreeItem<>(categoryName);
-                    categoryItem.setExpanded(true);
-                    root.getChildren().add(categoryItem);
-                    categoryMap.put(categoryName, categoryItem);
-                }
+                // 3. 创建最后的文件节点
+                String simpleFileName = parts[parts.length - 1]; // 纯文件名
 
-                // 4. 创建笔记节点
-                // 使用匿名类重写 toString，让树只显示短名字，但 Value 存长名字
-                final String displayName = noteName;
+                // 使用匿名类重写 toString，让树只显示短名字，但 Value 存长名字(用于读取)
                 TreeItem<String> noteItem = new TreeItem<>(fullFileName) {
-                    @Override public String toString() { return displayName; }
+                    @Override public String toString() { return simpleFileName; }
                 };
-                categoryItem.getChildren().add(noteItem);
+
+                currentParent.getChildren().add(noteItem);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        // 排序：让分类按名称排个序，好看点
-        root.getChildren().sort(Comparator.comparing(TreeItem::getValue));
-
         fileTree.setRoot(root);
         fileTree.setShowRoot(false);
+    }
+
+    // 辅助方法：在父节点下查找同名文件夹，没有则创建
+    private TreeItem<String> findOrCreateChild(TreeItem<String> parent, String name) {
+        for (TreeItem<String> child : parent.getChildren()) {
+            // 注意：文件夹节点的 Value 此时只存了文件夹名（如 "Java"），而不是全路径
+            // 这与文件节点不同，文件节点存的是 fullFileName
+            if (child.getValue().equals(name) && !child.isLeaf()) {
+                return child;
+            }
+        }
+        // 没找到，创建一个新的文件夹节点
+        TreeItem<String> newFolder = new TreeItem<>(name);
+        newFolder.setExpanded(true); // 默认展开
+        parent.getChildren().add(newFolder);
+
+        // 简单的排序：让文件夹也按字母排
+        parent.getChildren().sort(Comparator.comparing(TreeItem::getValue));
+
+        return newFolder;
     }
 
     private void setupTreeSelection() {
@@ -307,28 +322,31 @@ public class MainController {
 
     @FXML
     private void handleNewNote() {
-        // 1. 确定分类前缀
+        // 1. 计算前缀（也就是所在的路径）
         TreeItem<String> selected = fileTree.getSelectionModel().getSelectedItem();
-        String categoryPrefix = "";
+        StringBuilder prefixBuilder = new StringBuilder();
 
-        if (selected != null) {
-            String val = selected.getValue();
-            java.io.File f = new java.io.File("notes/" + val + ".md");
+        TreeItem<String> parentFolder;
 
-            if (f.exists() && f.isFile()) {
-                // 选中了笔记 -> 取父节点
-                if (selected.getParent() != null && selected.getParent().getParent() != null) {
-                    categoryPrefix = selected.getParent().getValue() + "_";
-                }
+        if (selected == null) {
+            parentFolder = fileTree.getRoot();
+        } else {
+            // 判断选中项是文件还是文件夹
+            boolean isNote = isNoteNode(selected); // 需抽取一个辅助判断方法
+
+            if (isNote) {
+                parentFolder = selected.getParent();
             } else {
-                // 选中了文件夹
-                if (selected.getParent() != null) { // 排除 Root 本身
-                    categoryPrefix = val + "_";
-                }
+                parentFolder = selected;
             }
         }
 
-        // 2. 自动生成一个不冲突的文件名 (新笔记, 新笔记1, 新笔记2...)
+        // 2. 递归向上遍历，拼接路径 (例如: Java_基础_)
+        // 只要 parentFolder 不是 Root，就往上找
+        getPathPrefix(parentFolder, prefixBuilder);
+        String categoryPrefix = prefixBuilder.toString();
+
+        // 3. 自动生成文件名
         String baseName = "新笔记";
         String pureName = baseName;
         String fullFileName = categoryPrefix + pureName;
@@ -336,26 +354,45 @@ public class MainController {
         try {
             List<String> existingFiles = FileUtil.listAllNotes();
             int count = 1;
-            // 循环检查，直到找到一个不重复的名字
             while (existingFiles.contains(fullFileName)) {
                 pureName = baseName + count;
                 fullFileName = categoryPrefix + pureName;
                 count++;
             }
 
-            // 3. 执行创建逻辑
+            // 4. 创建
             String initialContent = "# " + pureName;
             FileUtil.save(fullFileName, initialContent);
 
-            // 4. UI 刷新与聚焦
+            // 5. 刷新
             refreshFileTree();
 
-            // 自动跳转并进入编辑状态，选中标题文字
-            selectAndFocusNewNote(fullFileName, pureName);
+            // 6. 选中新文件 (这里的选中逻辑可能需要适配新的树结构，简单起见先刷树)
+            // 进阶：你可以写一个递归查找 selectFileInTree(fullFileName)
+            selectFileInTree(fullFileName);
 
         } catch (IOException e) {
             showError("创建失败", e.getMessage());
         }
+    }
+
+    // 辅助：递归获取路径前缀 (从下往上拼，最后反转? 或者 insert(0, ...))
+    private void getPathPrefix(TreeItem<String> item, StringBuilder sb) {
+        if (item == null || item.getValue().equals("Root")) return;
+
+        // 先处理父级，确保顺序是 A_B_
+        getPathPrefix(item.getParent(), sb);
+
+        sb.append(item.getValue()).append("_");
+    }
+
+    // 辅助：判断是否是笔记节点 (依据：是否在硬盘上真实存在该文件)
+    private boolean isNoteNode(TreeItem<String> item) {
+        if (item == null || item.getValue() == null) return false;
+        // 我们的逻辑是：文件节点存的是 "A_B_Note"，文件夹节点存的是 "B"
+        // 且文件节点通常是叶子节点 (isLeaf)，但文件夹刚创建时也是 leaf，所以得看文件是否存在
+        File f = new File("notes/" + item.getValue() + ".md");
+        return f.exists() && f.isFile();
     }
 
     /**
@@ -398,28 +435,6 @@ public class MainController {
         }
     }
 
-    private void setupContextMenu() {
-        ContextMenu contextMenu = new ContextMenu();
-        MenuItem deleteItem = new MenuItem("删除笔记");
-        deleteItem.setStyle("-fx-text-fill: red;");
-        deleteItem.setOnAction(event -> {
-            TreeItem<String> selected = fileTree.getSelectionModel().getSelectedItem();
-            if (selected != null && selected.isLeaf() && !isCategoryNode(selected.getValue())) {
-                String fileName = selected.getValue();
-                Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "确定删除 [" + fileName + "] 吗？", ButtonType.YES, ButtonType.NO);
-                alert.showAndWait().ifPresent(response -> {
-                    if (response == ButtonType.YES) {
-                        try {
-                            FileUtil.delete(fileName);
-                            refreshFileTree();
-                            showWelcomePage();
-                        } catch (IOException e) { e.printStackTrace(); }
-                    }
-                });
-            }
-        });
-        fileTree.setContextMenu(contextMenu);
-    }
 
     private void setupSearch() {
         sidebarSearchField.textProperty().addListener((observable, oldValue, newValue) -> {
@@ -460,28 +475,74 @@ public class MainController {
     @FXML
     private void handleSave() {
         if (currentNoteTitle == null || currentNoteTitle.isEmpty()) return;
+
         try {
-            // 1. 获取原始文本（包含换行、图片等所有信息）
+            // 1. 获取当前编辑器内容
             String content = editorArea.getText();
             if (content == null) content = "";
 
-            // 2. 核心保存：直接存入文件
+            // --- 【新增逻辑开始】自动重命名 ---
+            String extractedTitle = extractTitleFromContent(content);
+
+            if (extractedTitle != null && !extractedTitle.isEmpty()) {
+                // 2.1 处理非法字符
+                String safeNewName = sanitizeFileName(extractedTitle);
+
+                // 2.2 处理分类前缀逻辑 (保留原有的分类)
+                // 比如原文件名是 "课程_Java基础"，content里改成了 "# Java进阶"
+                // 我们希望新文件名是 "课程_Java进阶"
+                String currentCategory = "";
+                String currentPureName = currentNoteTitle;
+
+                if (currentNoteTitle.contains("_")) {
+                    int underscoreIndex = currentNoteTitle.indexOf("_");
+                    currentCategory = currentNoteTitle.substring(0, underscoreIndex + 1); // 保留 "课程_"
+                    currentPureName = currentNoteTitle.substring(underscoreIndex + 1);
+                }
+
+                // 2.3 拼接完整的新文件名
+                String newFullFileName = currentCategory + safeNewName;
+
+                // 2.4 只有当名字真正发生改变时，才执行重命名
+                // 注意：这里比较的是“去除分类后的纯文件名”是否一致
+                if (!currentPureName.equals(safeNewName)) {
+                    System.out.println("检测到标题变化，准备重命名: " + currentNoteTitle + " -> " + newFullFileName);
+
+                    try {
+                        // 执行物理重命名
+                        FileUtil.rename(currentNoteTitle, newFullFileName);
+
+                        // 更新当前内存中的标题记录
+                        currentNoteTitle = newFullFileName;
+
+                        // 刷新左侧文件树，显示新名字
+                        refreshFileTree();
+
+                        // 重新选中该节点 (可选优化，防止树列表跳动)
+                        // selectFileInTree(newFullFileName);
+
+                    } catch (IOException e) {
+                        System.err.println("自动重命名失败 (可能是文件名已存在): " + e.getMessage());
+                        // 如果重命名失败（比如名字冲突），可以选择弹窗提示，或者默默保持原名继续保存内容
+                    }
+                }
+            }
+            // --- 【新增逻辑结束】 ---
+
+            // 3. 核心保存：将内容写入文件 (此时 currentNoteTitle 已经是新的名字了)
             FileUtil.save(currentNoteTitle, content);
 
-            // 3. 更新 UI 状态（逻辑必须与 setupWordCount 完全一致）
-            // 过滤图片语法
+            // 4. 更新字数统计 (保持原有逻辑)
             String filtered = content.replaceAll("!\\[.*?\\]\\(.*?\\)", "");
-            // 过滤所有空白字符
             int count = filtered.replaceAll("\\s", "").length();
-
             wordCountLabel.setText("字数: " + count);
 
             System.out.println("已保存: " + currentNoteTitle);
 
         } catch (IOException e) {
-            // 这里的错误提示非常重要
             System.err.println("保存笔记失败: " + e.getMessage());
             e.printStackTrace();
+            showError("保存失败", e.getMessage());
         }
     }
 
@@ -646,9 +707,17 @@ public class MainController {
     }
 
     private void showWelcomePage() {
-        String welcomeMD = "# 欢迎使用 DeepMind Note\n\n> 这是一个基于 JavaFX 的交互式笔记演示原型。";
-        editorArea.setText(welcomeMD);
+        //原来你是这样写的：
+        //String welcomeMD = "# 欢迎使用 DeepMind Note\n\n> 这是一个基于 JavaFX 的交互式笔记演示原型。";
+
+        // --- 修改后：直接使用帮助文档的内容 ---
+        editorArea.setText(HELP_MARKDOWN_CONTENT);
+
+        // 将标题设为空，表示这是一个临时页面（或者你可以设为 "DeepMind_Help"）
         currentNoteTitle = "";
+
+        // 核心步骤：渲染预览并切换到预览模式
+        // 这样软件一启动，用户看到的就是渲染好的漂亮文档，而不是 Markdown 源码
         updatePreview();
         handlePreviewMode();
     }
@@ -1014,128 +1083,334 @@ public class MainController {
     /**
      * 专门为左侧 TreeView 设置右键菜单
      */
+    /**
+     * 专门为左侧 TreeView 设置右键菜单
+     * 逻辑：根据 isFolderNode 判断结果，动态显示/隐藏“新建”选项
+     */
     private void initFileTreeContextMenu() {
-        ContextMenu fileContextMenu = new ContextMenu();
+        ContextMenu contextMenu = new ContextMenu();
+
+        // --- 1. 定义菜单项 ---
+        MenuItem newNoteItem = new MenuItem("新建笔记");
+        newNoteItem.setOnAction(e -> handleNewNote());
+
+        MenuItem newFolderItem = new MenuItem("新建文件夹");
+        newFolderItem.setOnAction(e -> handleNewFolder());
+
+        // 分割线 (用来把新建和编辑分开)
+        SeparatorMenuItem separator1 = new SeparatorMenuItem();
 
         MenuItem renameItem = new MenuItem("重命名");
         renameItem.setOnAction(e -> handleRenameNote());
 
         MenuItem moveItem = new MenuItem("移动到文件夹...");
-        moveItem.setOnAction(e -> handleMoveNote()); // 绑定上面新写的函数
+        moveItem.setOnAction(e -> handleMoveNote());
 
-        MenuItem deleteItem = new MenuItem("删除笔记");
+        SeparatorMenuItem separator2 = new SeparatorMenuItem();
+
+        MenuItem deleteItem = new MenuItem("删除");
         deleteItem.setStyle("-fx-text-fill: red;");
         deleteItem.setOnAction(e -> handleDeleteNote());
 
-        fileContextMenu.getItems().addAll(renameItem, moveItem, new SeparatorMenuItem(), deleteItem);
-        fileTree.setContextMenu(fileContextMenu);
+        // --- 2. 初始全部加入 ---
+        contextMenu.getItems().addAll(
+                newNoteItem, newFolderItem, separator1,
+                renameItem, moveItem, separator2, deleteItem
+        );
+
+        fileTree.setContextMenu(contextMenu);
+
+        // --- 3. 核心：右键点击前动态判断 ---
+        fileTree.setOnContextMenuRequested(e -> {
+            // A. 获取鼠标点中的节点
+            javafx.scene.Node node = e.getPickResult().getIntersectedNode();
+            while (node != null && !(node instanceof TreeCell) && node != fileTree) {
+                node = node.getParent();
+            }
+
+            // B. 判断点中的内容
+            if (node instanceof TreeCell<?> cell && !cell.isEmpty()) {
+                // 1. 强制选中当前行 (优化体验)
+                TreeItem<String> item = (TreeItem<String>) cell.getTreeItem();
+                fileTree.getSelectionModel().select(item);
+
+                // 2. 使用你提供的 isFolderNode 方法判断
+                boolean isFolder = isFolderNode(item);
+
+                if (isFolder) {
+                    // === 情况 A: 右键点击的是文件夹 ===
+                    // 显示“新建”系列
+                    newNoteItem.setVisible(true);
+                    newFolderItem.setVisible(true);
+                    separator1.setVisible(true);
+
+                    // 文件夹也可以重命名和删除，所以保持显示
+                    renameItem.setVisible(true);
+                    moveItem.setVisible(true); // 文件夹一般不移动，或者看你需求，这里先留着
+                    deleteItem.setVisible(true);
+                    separator2.setVisible(true);
+                } else {
+                    // === 情况 B: 右键点击的是笔记文件 ===
+                    // 隐藏“新建”系列
+                    newNoteItem.setVisible(false);
+                    newFolderItem.setVisible(false);
+                    separator1.setVisible(false);
+
+                    // 显示文件操作
+                    renameItem.setVisible(true);
+                    moveItem.setVisible(true);
+                    deleteItem.setVisible(true);
+                    separator2.setVisible(true);
+                }
+
+            } else {
+                // === 情况 C: 右键点击的是空白处 ===
+                // 视为在根目录操作，取消选中
+                fileTree.getSelectionModel().clearSelection();
+
+                // 只显示“新建”，隐藏针对特定文件的操作
+                newNoteItem.setVisible(true);
+                newFolderItem.setVisible(true);
+                separator1.setVisible(true); // 保留分割线看起来舒服点，或者隐藏也可以
+
+                renameItem.setVisible(false);
+                moveItem.setVisible(false);
+                deleteItem.setVisible(false);
+                separator2.setVisible(false);
+            }
+        });
+    }
+
+
+    /**
+     * 设置文件树的单元格工厂：
+     * 1. 负责显示（去前缀）
+     * 2. 负责拖拽（Drag & Drop）
+     * 3. 负责行内编辑（重命名）
+     */
+    // MainController.java
+
+    private void setupDragAndDrop() {
+        fileTree.setCellFactory(tv -> new TreeCell<String>() {
+            private TextField textField;
+
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    if (isEditing()) {
+                        if (textField != null) {
+                            setText(null);
+                            setGraphic(textField);
+                        }
+                        return;
+                    }
+                    // 显示逻辑：如果是文件(叶子)，去掉前缀显示；如果是文件夹，直接显示名字
+                    if (getTreeItem().isLeaf() && item.contains("_")) {
+                        setText(item.substring(item.lastIndexOf("_") + 1));
+                    } else {
+                        setText(item);
+                    }
+                    setGraphic(null);
+                }
+            }
+
+            @Override
+            public void startEdit() {
+                // 允许编辑所有节点（不再限制只编辑叶子节点）
+                if (!isEmpty()) {
+                    super.startEdit();
+                    createTextField();
+                    setText(null);
+                    setGraphic(textField);
+                    textField.selectAll();
+                    textField.requestFocus();
+                }
+            }
+
+            @Override
+            public void cancelEdit() {
+                super.cancelEdit();
+                // 恢复显示文本
+                String textToShow = getItem();
+                if (getTreeItem().isLeaf() && textToShow.contains("_")) {
+                    textToShow = textToShow.substring(textToShow.lastIndexOf("_") + 1);
+                }
+                setText(textToShow);
+                setGraphic(null);
+            }
+
+            @Override
+            public void commitEdit(String newName) {
+                // 1. 获取重命名之前的值
+                String oldName = getItem(); // 对于文件夹，这是 "Category"；对于文件，这是 "Category_Note"
+
+                // 如果名字没变，直接返回
+                if (oldName.equals(newName)) {
+                    super.commitEdit(oldName);
+                    return;
+                }
+
+                // 2. 简单的非法字符检查
+                if (newName.contains("/") || newName.contains("\\") || newName.contains(":")) {
+                    showError("重命名失败", "名称包含非法字符");
+                    cancelEdit();
+                    return;
+                }
+
+                // --- 分支 A: 如果是笔记文件 (叶子节点) ---
+                if (getTreeItem().isLeaf()) {
+                    // 计算旧的全路径和新的全路径
+                    String prefix = "";
+                    if (oldName.contains("_")) {
+                        prefix = oldName.substring(0, oldName.lastIndexOf("_") + 1);
+                    }
+                    String newFullName = prefix + newName;
+
+                    try {
+                        FileUtil.rename(oldName, newFullName);
+                        // 同步更新文件内部的 # 标题
+                        syncH1TitleInFile(newFullName, newName, oldName);
+
+                        super.commitEdit(newFullName);
+                    } catch (IOException e) {
+                        showError("重命名失败", "文件名可能已存在或被占用。");
+                        cancelEdit();
+                    }
+                }
+                // --- 分支 B: 如果是文件夹 (分类节点) ---
+                else {
+                    try {
+                        // 执行批量重命名逻辑
+                        boolean success = renameCategory(getTreeItem(), oldName, newName);
+                        if (success) {
+                            super.commitEdit(newName);
+                            // 文件夹改名涉及大量文件变动，必须刷新整个树以更新所有子节点
+                            refreshFileTree();
+                        } else {
+                            cancelEdit();
+                        }
+                    } catch (IOException e) {
+                        showError("文件夹重命名失败", e.getMessage());
+                        cancelEdit();
+                    }
+                }
+            }
+
+            private void createTextField() {
+                // 编辑时显示的文本：如果是文件，显示纯文件名；如果是文件夹，显示文件夹名
+                String textToEdit = getItem();
+                if (getTreeItem().isLeaf() && textToEdit.contains("_")) {
+                    textToEdit = textToEdit.substring(textToEdit.lastIndexOf("_") + 1);
+                }
+
+                textField = new TextField(textToEdit);
+                textField.getStyleClass().add("rename-input");
+                textField.setOnKeyReleased(t -> {
+                    if (t.getCode() == KeyCode.ENTER) commitEdit(textField.getText());
+                    else if (t.getCode() == KeyCode.ESCAPE) cancelEdit();
+                });
+                // 失去焦点时自动提交
+                textField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+                    if (!newVal) commitEdit(textField.getText());
+                });
+            }
+
+            // --- 拖拽逻辑保持不变 (为了简洁我省略了部分重复代码，请保留你原有的拖拽代码) ---
+            {
+                setOnDragDetected(event -> {
+                    if (!isEmpty() && getTreeItem().isLeaf()) {
+                        Dragboard db = startDragAndDrop(TransferMode.MOVE);
+                        ClipboardContent content = new ClipboardContent();
+                        content.putString(getItem());
+                        db.setContent(content);
+                        event.consume();
+                    }
+                });
+                setOnDragOver(event -> {
+                    if (event.getGestureSource() != this && event.getDragboard().hasString()) {
+                        if (!isEmpty()) event.acceptTransferModes(TransferMode.MOVE);
+                    }
+                    event.consume();
+                });
+                setOnDragDropped(event -> {
+                    Dragboard db = event.getDragboard();
+                    boolean success = false;
+                    if (db.hasString()) {
+                        String sourceName = db.getString();
+                        TreeItem<String> targetItem = getTreeItem();
+
+                        // 计算目标分类前缀
+                        StringBuilder prefixBuilder = new StringBuilder();
+                        TreeItem<String> folderNode = targetItem.isLeaf() ? targetItem.getParent() : targetItem;
+                        getPathPrefix(folderNode, prefixBuilder);
+                        String targetPrefix = prefixBuilder.toString(); // 例如 "学习_Java_"
+
+                        // 获取源文件的纯文件名
+                        String pureName = sourceName.contains("_") ?
+                                sourceName.substring(sourceName.lastIndexOf("_") + 1) : sourceName;
+
+                        String destName = targetPrefix + pureName;
+                        if (!sourceName.equals(destName)) {
+                            success = moveNoteFile(sourceName, destName);
+                        }
+                    }
+                    event.setDropCompleted(success);
+                    event.consume();
+                    if (success) refreshFileTree();
+                });
+            }
+        });
     }
 
     /**
-     * 设置文件树的拖拽功能
+     * 核心逻辑：重命名文件夹（实际上是批量重命名所有拥有该前缀的文件）
+     * @param item 被修改的树节点
+     * @param oldCategoryName 旧的文件夹名 (例如 "Java")
+     * @param newCategoryName 新的文件夹名 (例如 "Java新")
      */
-    private void setupDragAndDrop() {
-        fileTree.setCellFactory(tree -> {
-            TreeCell<String> cell = new TreeCell<>() {
-                @Override
-                protected void updateItem(String item, boolean empty) {
-                    super.updateItem(item, empty);
-                    if (empty || item == null) {
-                        setText(null);
-                        setGraphic(null);
-                    } else {
-                        // --- 保持你原有的显示逻辑 ---
-                        // 如果是叶子节点（笔记），只显示下划线后面的部分
-                        // 如果是文件夹（分类），直接显示名字
-                        TreeItem<String> treeItem = getTreeItem();
-                        if (treeItem != null && treeItem.isLeaf()) {
-                            // 笔记：解析 "分类_笔记名" -> "笔记名"
-                            if (item.contains("_")) {
-                                setText(item.substring(item.indexOf("_") + 1));
-                            } else {
-                                setText(item);
-                            }
-                            // 可以加个图标
-                            // setGraphic(new ImageView(new Image("...")));
-                        } else {
-                            // 文件夹
-                            setText(item);
-                        }
-                    }
+    private boolean renameCategory(TreeItem<String> item, String oldCategoryName, String newCategoryName) throws IOException {
+        // 1. 计算该文件夹的“完整前缀路径”
+        // 例如：Root -> 学习 -> Java (我们正在改 Java)
+        // 父级前缀是 "学习_"，旧前缀是 "学习_Java_"，新前缀是 "学习_Java新_"
+
+        StringBuilder parentPrefixBuilder = new StringBuilder();
+        getPathPrefix(item.getParent(), parentPrefixBuilder);
+        String parentPrefix = parentPrefixBuilder.toString(); // 例如 "学习_" (如果是根目录则为空)
+
+        String oldFullPrefix = parentPrefix + oldCategoryName + "_";
+        String newFullPrefix = parentPrefix + newCategoryName + "_";
+
+        System.out.println("准备将前缀 [" + oldFullPrefix + "] 批量改为 [" + newFullPrefix + "]");
+
+        // 2. 获取所有文件
+        List<String> allFiles = FileUtil.listAllNotes();
+        int successCount = 0;
+
+        // 3. 遍历并筛选需要改名的文件
+        for (String fileName : allFiles) {
+            if (fileName.startsWith(oldFullPrefix)) {
+                // 构造新文件名
+                // replaceFirst 仅替换开头匹配的部分，防止文件名中间恰好也有相同的字符串
+                String newFileName = fileName.replaceFirst(java.util.regex.Pattern.quote(oldFullPrefix), newFullPrefix);
+
+                FileUtil.rename(fileName, newFileName);
+                successCount++;
+
+                // 如果恰好正在编辑这个文件，更新 currentNoteTitle
+                if (currentNoteTitle.equals(fileName)) {
+                    currentNoteTitle = newFileName;
                 }
-            };
+            }
+        }
 
-            // --- 1. 拖拽探测 (Drag Detected) ---
-            cell.setOnDragDetected(event -> {
-                if (!cell.isEmpty() && cell.getTreeItem().isLeaf()) {
-                    // 只有“笔记”可以被拖拽，文件夹不能拖
-                    javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.MOVE);
-                    javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-                    // 我们把完整的 "分类_笔记名" 放入剪贴板
-                    content.putString(cell.getItem());
-                    db.setContent(content);
-                    event.consume();
-                }
-            });
-
-            // --- 2. 拖拽经过 (Drag Over) ---
-            cell.setOnDragOver(event -> {
-                // 接受条件：拖拽有内容，且目标不是自己
-                if (event.getGestureSource() != cell && event.getDragboard().hasString()) {
-                    // 只能拖到“文件夹”上，或者拖到“文件夹里的其他笔记”上（意为归入该文件夹）
-                    if (!cell.isEmpty()) {
-                        event.acceptTransferModes(javafx.scene.input.TransferMode.MOVE);
-                    }
-                }
-                event.consume();
-            });
-
-            // --- 3. 拖拽释放 (Drag Dropped) - 核心逻辑 ---
-            cell.setOnDragDropped(event -> {
-                javafx.scene.input.Dragboard db = event.getDragboard();
-                boolean success = false;
-
-                if (db.hasString()) {
-                    String sourceFullFileName = db.getString(); // 例如 "课程学习_Java笔记"
-                    TreeItem<String> targetTreeItem = cell.getTreeItem();
-
-                    // 1. 确定目标分类名称
-                    String targetCategory;
-                    if (targetTreeItem.isLeaf()) {
-                        // 如果拖到了另一个笔记上，就取那个笔记的父节点（文件夹）作为目标
-                        targetCategory = targetTreeItem.getParent().getValue();
-                    } else {
-                        // 如果直接拖到了文件夹上
-                        targetCategory = targetTreeItem.getValue();
-                    }
-
-                    // 2. 提取原笔记的纯标题
-                    String noteTitle = sourceFullFileName;
-                    if (sourceFullFileName.contains("_")) {
-                        noteTitle = sourceFullFileName.substring(sourceFullFileName.indexOf("_") + 1);
-                    }
-
-                    // 3. 构造新的文件名
-                    String newFullFileName = targetCategory + "_" + noteTitle;
-
-                    // 4. 执行文件重命名操作
-                    if (!sourceFullFileName.equals(newFullFileName)) {
-                        success = moveNoteFile(sourceFullFileName, newFullFileName);
-                    }
-                }
-
-                event.setDropCompleted(success);
-                event.consume();
-
-                // 5. 如果成功，刷新文件树
-                if (success) {
-                    refreshFileTree();
-                }
-            });
-
-            return cell;
-        });
+        System.out.println("成功重命名了 " + successCount + " 个文件。");
+        return true;
     }
+
 
     /**
      * 物理移动文件（重命名）
@@ -1165,37 +1440,16 @@ public class MainController {
     /**
      * 整合后的重命名逻辑
      */
+    // MainController.java
+
     @FXML
     private void handleRenameNote() {
         TreeItem<String> selectedItem = fileTree.getSelectionModel().getSelectedItem();
-        if (selectedItem == null || selectedItem.getParent() == null) return;
+        if (selectedItem == null) return;
 
-        String oldTitle = selectedItem.getValue();
-
-        TextInputDialog dialog = new TextInputDialog(oldTitle);
-        dialog.setTitle("重命名笔记");
-        dialog.setHeaderText("注意：修改下划线前的文字将改变所属文件夹");
-        dialog.setContentText("请输入新名称:");
-
-        dialog.showAndWait().ifPresent(newTitle -> {
-            if (!newTitle.isEmpty() && !newTitle.equals(oldTitle)) {
-                try {
-                    // 1. 物理重命名 (FileUtil 会处理 .md 和 .json)
-                    FileUtil.rename(oldTitle, newTitle);
-
-                    // 2. 更新当前变量
-                    if (currentNoteTitle.equals(oldTitle)) {
-                        currentNoteTitle = newTitle;
-                    }
-
-                    // 3. 关键修复：直接刷新整棵树！
-                    refreshFileTree();
-
-                } catch (IOException e) {
-                    showError("重命名失败", "可能是名称冲突或文件被占用。");
-                }
-            }
-        });
+        // 不再弹窗，直接让 TreeView 进入编辑状态
+        // 这会自动调用我们下面要写的 TreeCell.startEdit()
+        fileTree.edit(selectedItem);
     }
 
     /**
@@ -1271,26 +1525,28 @@ public class MainController {
 
         String title = selectedItem.getValue();
 
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "确定要删除笔记 [" + title + "] 吗？", ButtonType.YES, ButtonType.NO);
-        confirm.setTitle("删除确认");
+        // === 使用新弹窗 ===
+        boolean confirm = showConfirmDialog(
+                "删除笔记",
+                "确定要永久删除 [" + title + "] 吗？\n此操作无法撤销。",
+                true // true 表示这是危险操作，按钮会变红
+        );
 
-        confirm.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.YES) {
-                try {
-                    FileUtil.delete(title);
-                    selectedItem.getParent().getChildren().remove(selectedItem);
+        if (confirm) {
+            try {
+                FileUtil.delete(title);
+                selectedItem.getParent().getChildren().remove(selectedItem);
 
-                    // 如果删除的是当前编辑的笔记，清空内容
-                    if (currentNoteTitle.equals(title)) {
-                        editorArea.clear();
-                        webView.getEngine().loadContent("");
-                        currentNoteTitle = "";
-                    }
-                } catch (IOException e) {
-                    showError("删除失败", "文件删除时出错。");
+                // 如果删除的是当前正在编辑的文件，清空编辑器
+                if (currentNoteTitle.equals(title)) {
+                    editorArea.clear();
+                    webView.getEngine().loadContent("");
+                    currentNoteTitle = "";
                 }
+            } catch (IOException e) {
+                showError("删除失败", "文件可能被占用或不存在。");
             }
-        });
+        }
     }
 
     /**
@@ -1358,40 +1614,68 @@ public class MainController {
      */
     @FXML
     private void handleNewFolder() {
-        // 1. 生成不重复的文件夹名
+        TreeItem<String> selected = fileTree.getSelectionModel().getSelectedItem();
+        TreeItem<String> targetParent;
+
+        // 1. 确定要把新文件夹加到哪里
+        if (selected == null || selected == fileTree.getRoot()) {
+            targetParent = fileTree.getRoot(); // 没选中，加到根目录
+        } else {
+            // 这里的逻辑：我们通过判断 fullFileName 是否存在来推测它是不是文件
+            // 更好的方式是看它是否有子节点，或者我们之前约定的 leaf 逻辑
+            String val = selected.getValue();
+            boolean isFile = false;
+            try {
+                // 简单的判断：如果硬盘上有这个名字的文件，那就是文件，否则就是文件夹节点
+                // 注意：因为文件夹节点存的是短名(如"Java")，硬盘上应该没有 "Java" 这个文件(除非没后缀)
+                // 而文件节点存的是 "Java_Note.md"
+                File f = new File("notes/" + val + ".md"); // 尝试补全后缀判断
+                if(f.exists() && f.isFile()) isFile = true;
+                else if(new File("notes/" + val).exists() && new File("notes/" + val).isFile()) isFile = true; // 兼容无后缀
+            } catch (Exception e) {}
+
+            if (isFile) {
+                targetParent = selected.getParent(); // 选中了文件，加到同级
+            } else {
+                targetParent = selected; // 选中了文件夹，加到它里面
+            }
+        }
+
+        if (targetParent == null) targetParent = fileTree.getRoot();
+
+        // 2. 生成不重复的文件夹名
         String baseName = "新建文件夹";
         String finalName = baseName;
         int counter = 1;
 
-        // 检查当前树里有没有重名的
-        if (fileTree.getRoot() != null) {
-            boolean exists;
-            do {
-                exists = false;
-                for (TreeItem<String> item : fileTree.getRoot().getChildren()) {
-                    if (item.getValue().equals(finalName)) {
-                        exists = true;
-                        finalName = baseName + counter;
-                        counter++;
-                        break;
-                    }
+        boolean exists;
+        do {
+            exists = false;
+            for (TreeItem<String> item : targetParent.getChildren()) {
+                // 这里比较的是显示的短名字
+                String itemDisplayName = item.getValue();
+                // 如果是文件节点，getValue是全名，需要截取最后一段比较?
+                // 不，文件夹节点的getValue就是文件夹名，所以直接比
+                if (item.toString().equals(finalName)) {
+                    exists = true;
+                    finalName = baseName + counter;
+                    counter++;
+                    break;
                 }
-            } while (exists);
-        }
+            }
+        } while (exists);
 
-        // 2. 创建新节点并添加到树中
+        // 3. 创建并添加
         TreeItem<String> newCategory = new TreeItem<>(finalName);
-        if (fileTree.getRoot() == null) {
-            fileTree.setRoot(new TreeItem<>("Root"));
-        }
-        fileTree.getRoot().getChildren().add(newCategory);
+        targetParent.getChildren().add(newCategory);
+        targetParent.setExpanded(true);
 
-        // 3. 自动选中并展开，方便用户直接点左边那个“新建笔记”按钮
+        // 选中新文件夹
         fileTree.getSelectionModel().select(newCategory);
-        newCategory.setExpanded(true);
 
-        // 提示：你可以在这里加一个逻辑，允许用户像 IDEA 一样直接重命名
-        // 但目前先保持直接创建
+        // 滚动到该位置
+        int row = fileTree.getRow(newCategory);
+        if(row >= 0) fileTree.scrollTo(row);
     }
 
     /**
@@ -1690,22 +1974,28 @@ public class MainController {
     }
 
     //  执行删除当前笔记逻辑
+    // MainController.java
+
     @FXML
     private void handleDelete() {
         if (currentNoteTitle == null || currentNoteTitle.isEmpty()) return;
 
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "确定要删除笔记 [" + currentNoteTitle + "] 吗？", ButtonType.YES, ButtonType.NO);
-        alert.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.YES) {
-                try {
-                    FileUtil.delete(currentNoteTitle); // 从磁盘删除
-                    refreshFileTree(); // 刷新左侧树
-                    showWelcomePage(); // 回到欢迎页
-                } catch (IOException e) {
-                    showError("删除失败", e.getMessage());
-                }
+        // 修改：使用新的 showConfirmDialog
+        boolean confirm = showConfirmDialog(
+                "删除笔记",
+                "确定要删除当前打开的笔记 [" + currentNoteTitle + "] 吗？\n此操作无法撤销。",
+                true // true = 红色按钮
+        );
+
+        if (confirm) {
+            try {
+                FileUtil.delete(currentNoteTitle);
+                refreshFileTree();
+                showWelcomePage();
+            } catch (IOException e) {
+                showError("删除失败", e.getMessage());
             }
-        });
+        }
     }
 
     //  实现打印逻辑 (利用 WebView 引擎)
@@ -2194,4 +2484,507 @@ public class MainController {
         }
     }
 
+    /**
+     * 辅助方法：从 Markdown 内容中提取第一个一级标题 (# 标题)
+     */
+    private String extractTitleFromContent(String content) {
+        if (content == null) return null;
+        String[] lines = content.split("\n");
+        for (String line : lines) {
+            // 找到第一个以 "# " 开头的行 (忽略前面的空白)
+            if (line.trim().startsWith("# ")) {
+                // 去掉 "# " 并去除首尾空格
+                return line.trim().substring(2).trim();
+            }
+        }
+        return null; // 没有找到一级标题
+    }
+
+    /**
+     * 辅助方法：净化文件名 (去除 Windows/Linux 不允许的字符)
+     */
+    private String sanitizeFileName(String name) {
+        return name.replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
+
+
+    // =====================================================
+//  Custom Dialog Logic (美化版弹窗工具)
+// =====================================================
+
+    /**
+     * 核心工具：显示一个现代化的确认弹窗
+     * @param title 标题
+     * @param message 消息内容
+     * @param isDestructive 是否是破坏性操作（如删除），如果是，按钮会变红
+     * @return 用户是否点击了“确定”
+     */
+    /**
+     * 核心工具：显示一个 IDEA 风格的确认弹窗
+     */
+    private boolean showConfirmDialog(String title, String message, boolean isDestructive) {
+        // 1. 创建 Stage (TRANSPARENT 去除系统自带丑陋边框)
+        javafx.stage.Stage stage = new javafx.stage.Stage();
+        stage.initModality(javafx.stage.Modality.APPLICATION_MODAL); // 阻塞父窗口
+        stage.initStyle(javafx.stage.StageStyle.TRANSPARENT);
+        stage.initOwner(rootContainer.getScene().getWindow());
+
+        // 2. 布局容器
+        VBox root = new VBox();
+        root.getStyleClass().add("modern-dialog-root"); // 应用 CSS
+
+        //// 关键：继承主界面的 CSS (Dark/Light 模式)
+        //root.getStylesheets().addAll(rootContainer.getScene().getStylesheets());
+
+
+        // 方案 A: 直接从 rootContainer 获取 (推荐)
+        if (rootContainer.getStylesheets().isEmpty()) {
+            // 双重保险：如果 root 也没获取到，直接加载文件路径
+            try {
+                String cssPath = getClass().getResource("/css/style.css").toExternalForm();
+                root.getStylesheets().add(cssPath);
+            } catch (Exception e) {
+                System.err.println("CSS 加载失败: " + e.getMessage());
+            }
+        } else {
+            root.getStylesheets().addAll(rootContainer.getStylesheets());
+        }
+
+
+        // 关键：传递当前的主题 Class (例如 theme-dark)，确保弹窗颜色正确
+        rootContainer.getStyleClass().forEach(style -> root.getStyleClass().add(style));
+
+        // 3. 标题与内容
+        Label lblTitle = new Label(title);
+        lblTitle.getStyleClass().add("modern-dialog-title");
+
+        Label lblMsg = new Label(message);
+        lblMsg.getStyleClass().add("modern-dialog-message");
+        lblMsg.setWrapText(true);
+        lblMsg.setPrefWidth(350); // 增加一点宽度
+
+        // 4. 按钮设计
+        Button btnCancel = new Button("取消");
+        btnCancel.getStyleClass().addAll("dialog-btn", "dialog-btn-cancel");
+
+        // 根据是否是破坏性操作（删除），决定按钮是 蓝色 还是 红色
+        Button btnConfirm = new Button(isDestructive ? "删除" : "确定");
+        btnConfirm.getStyleClass().addAll("dialog-btn", isDestructive ? "dialog-btn-danger" : "dialog-btn-confirm");
+        // 默认聚焦在取消按钮上，防止误删 (IDEA 逻辑)
+        if (isDestructive) {
+            btnCancel.setDefaultButton(true);
+        } else {
+            btnConfirm.setDefaultButton(true);
+        }
+
+        // IDEA 风格：按钮靠右
+        HBox btnBar = new HBox(btnCancel, btnConfirm);
+        btnBar.getStyleClass().add("modern-dialog-btn-bar");
+
+        root.getChildren().addAll(lblTitle, lblMsg, btnBar);
+
+        // 5. 事件处理
+        java.util.concurrent.atomic.AtomicBoolean result = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        btnCancel.setOnAction(e -> stage.close());
+        btnConfirm.setOnAction(e -> {
+            result.set(true);
+            stage.close();
+        });
+
+        // 键盘支持 (回车确认，ESC取消)
+        root.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case ENTER -> {
+                    // 如果是删除操作，为了安全，必须显式按到确认按钮，回车默认触发 defaultButton
+                    if (btnConfirm.isDefaultButton()) btnConfirm.fire();
+                    else btnCancel.fire();
+                }
+                case ESCAPE -> btnCancel.fire();
+            }
+        });
+
+        // 6. 让无边框窗口可以拖动
+        makeDraggable(stage, root);
+
+        // 7. 显示
+        javafx.scene.Scene scene = new javafx.scene.Scene(root);
+        scene.setFill(null); // 场景透明
+        stage.setScene(scene);
+        stage.showAndWait();
+
+        return result.get();
+    }
+
+    /**
+     * 核心工具：显示一个现代化的输入弹窗
+     * @return 用户输入的字符串，取消则返回 null
+     */
+    private String showInputDialog(String title, String message, String defaultValue) {
+        javafx.stage.Stage stage = new javafx.stage.Stage();
+        stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        stage.initStyle(javafx.stage.StageStyle.TRANSPARENT);
+        stage.initOwner(rootContainer.getScene().getWindow());
+
+        VBox root = new VBox(10);
+        root.getStyleClass().add("modern-dialog-root");
+        root.getStylesheets().addAll(rootContainer.getScene().getStylesheets());
+        rootContainer.getStyleClass().forEach(style -> root.getStyleClass().add(style));
+
+        Label lblTitle = new Label(title);
+        lblTitle.getStyleClass().add("modern-dialog-title");
+
+        Label lblMsg = new Label(message);
+        lblMsg.getStyleClass().add("modern-dialog-message");
+
+        TextField inputField = new TextField(defaultValue);
+        inputField.getStyleClass().add("modern-dialog-input");
+
+        Button btnCancel = new Button("取消");
+        btnCancel.getStyleClass().addAll("dialog-btn", "dialog-btn-cancel");
+        Button btnConfirm = new Button("保存");
+        btnConfirm.getStyleClass().addAll("dialog-btn", "dialog-btn-confirm");
+
+        HBox btnBar = new HBox(btnCancel, btnConfirm);
+        btnBar.getStyleClass().add("modern-dialog-btn-bar");
+
+        root.getChildren().addAll(lblTitle, lblMsg, inputField, btnBar);
+
+        // 结果容器
+        StringBuilder result = new StringBuilder();
+
+        btnCancel.setOnAction(e -> stage.close());
+        btnConfirm.setOnAction(e -> {
+            result.append(inputField.getText());
+            stage.close();
+        });
+
+        // 自动聚焦并全选
+        javafx.application.Platform.runLater(() -> {
+            inputField.requestFocus();
+            inputField.selectAll();
+        });
+
+        inputField.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ENTER) btnConfirm.fire();
+            if (e.getCode() == KeyCode.ESCAPE) btnCancel.fire();
+        });
+
+        makeDraggable(stage, root);
+
+        javafx.scene.Scene scene = new javafx.scene.Scene(root);
+        scene.setFill(null);
+        stage.setScene(scene);
+        stage.showAndWait();
+
+        return result.length() > 0 ? result.toString() : null;
+    }
+
+    // 辅助方法：实现窗口拖拽
+    private void makeDraggable(javafx.stage.Stage stage, javafx.scene.Node node) {
+        final double[] xOffset = {0};
+        final double[] yOffset = {0};
+        node.setOnMousePressed(event -> {
+            xOffset[0] = event.getSceneX();
+            yOffset[0] = event.getSceneY();
+        });
+        node.setOnMouseDragged(event -> {
+            stage.setX(event.getScreenX() - xOffset[0]);
+            stage.setY(event.getScreenY() - yOffset[0]);
+        });
+    }
+
+    /**
+     * 当文件名在侧边栏被修改后，同步修改文件内容里的 # 标题
+     * @param fullFileName 新的完整文件名 (用于读取/保存文件)
+     * @param newTitle     新的标题文字 (用于替换内容里的 # 标题)
+     * @param oldFullName  旧文件名 (用于判断是否是当前打开的文件)
+     */
+    private void syncH1TitleInFile(String fullFileName, String newTitle, String oldFullName) throws IOException {
+        String content;
+        boolean isCurrentFile = currentNoteTitle.equals(oldFullName);
+
+        // 1. 获取内容
+        if (isCurrentFile) {
+            // 如果改的是当前正在编辑的文件，直接从编辑器拿最新内容
+            content = editorArea.getText();
+        } else {
+            // 如果改的是后台文件，从硬盘读 (注意：此时文件已经被 rename 到 fullFileName 了)
+            content = FileUtil.read(fullFileName);
+        }
+
+        if (content == null) content = "";
+
+        // 2. 使用正则替换第一个 H1 标题
+        // (?m) 开启多行模式，^ 匹配行首
+        // 匹配以 # 开头，后面跟一个空格，然后是任意文字的行
+        // 替换为 # 新标题
+        // replaceFirst 只换第一个
+        String newContent = content.replaceFirst("(?m)^#\\s+.*", "# " + newTitle);
+
+        // 如果文中没有 # 标题，可以选择不加，或者强制加在头部：
+        if (content.equals(newContent) && !content.startsWith("# ")) {
+            // 没找到标题，帮他加上
+            newContent = "# " + newTitle + "\n\n" + content;
+        }
+
+        // 3. 保存回硬盘
+        FileUtil.save(fullFileName, newContent);
+
+        // 4. 如果是当前文件，还需要刷新编辑器显示和状态变量
+        if (isCurrentFile) {
+            currentNoteTitle = fullFileName; // 更新内存中的文件名
+
+            // 只有当内容真的变了才刷新编辑器（防止光标跳动太厉害）
+            if (!editorArea.getText().equals(newContent)) {
+                // 记住光标位置
+                int caret = editorArea.getCaretPosition();
+                editorArea.setText(newContent);
+                // 尽量恢复光标（如果标题变短了可能会越界，简单处理一下）
+                editorArea.positionCaret(Math.min(caret, newContent.length()));
+            }
+            if (webView.isVisible()) {
+                updatePreview();
+            }
+        }
+
+    }
+
+
+    // =====================================================
+    // 帮助菜单逻辑
+    // =====================================================
+
+    /**
+     * 打开用户手册
+     * 逻辑：检查是否有 DeepMind_Help.md，没有则创建，有则直接打开
+     */
+    @FXML
+    private void handleOpenHelp() {
+        String helpFileName = "DeepMind_Help"; // 帮助文件的文件名（不带后缀）
+        File helpFile = new File("notes/" + helpFileName + ".md");
+
+        // 1. 如果文件不存在，自动创建并写入默认内容
+        if (!helpFile.exists()) {
+            try {
+                FileUtil.save(helpFileName, HELP_MARKDOWN_CONTENT);
+                // 刷新左侧文件树，让新文件显示出来
+                refreshFileTree();
+            } catch (IOException e) {
+                showError("创建失败", "无法生成帮助文件: " + e.getMessage());
+                return;
+            }
+        }
+
+        // 2. 在左侧树中找到这个文件并选中它 (这样会触发 loadNoteContent)
+        selectFileInTree(helpFileName);
+
+        // 3. 强制切到预览模式，方便阅读
+        handlePreviewMode();
+    }
+
+    /**
+     * 关于弹窗
+     */
+    @FXML
+    private void handleAbout() {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("关于 DeepMind Note");
+        alert.setHeaderText("DeepMind Note v1.0");
+        alert.setContentText("开发者：DeepMind Dev Team\n\n一款专注于沉浸式写作与知识管理的\nJavaFX 轻量级笔记应用。");
+        alert.showAndWait();
+    }
+
+    /**
+     * 辅助方法：在文件树中自动选中指定文件
+     * (这个方法对于提升体验很重要，让左侧列表高亮当前打开的文件)
+     */
+    private void selectFileInTree(String targetFileName) {
+        if (fileTree.getRoot() == null) return;
+
+        // 遍历所有节点寻找目标
+        for (TreeItem<String> category : fileTree.getRoot().getChildren()) {
+            // 如果是未分类的直接节点
+            if (category.getValue().equals(targetFileName)) {
+                fileTree.getSelectionModel().select(category);
+                return;
+            }
+            // 遍历子节点
+            for (TreeItem<String> note : category.getChildren()) {
+                // 注意：树节点里的 value 可能是 "分类_文件名" 也可能是 "文件名"
+                // 你的逻辑里 TreeItem 存的是 fullFileName (比如 "DeepMind_Help")
+                if (note.getValue().equals(targetFileName)) {
+                    category.setExpanded(true); // 展开文件夹
+                    fileTree.getSelectionModel().select(note); // 选中
+                    fileTree.scrollTo(fileTree.getRow(note)); // 滚动到可见位置
+                    return;
+                }
+            }
+        }
+    }
+
+
+    /**
+     * 判断一个节点是否应该被视为文件夹
+     * 逻辑：如果它有子节点，或者它在硬盘上找不到对应的 .md 文件，它就是文件夹
+     */
+    private boolean isFolderNode(TreeItem<String> item) {
+        if (item == null) return false;
+        if (!item.isLeaf()) return true; // 有子节点肯定是文件夹
+
+        // 如果是叶子节点，检查硬盘上是否存在该文件
+        // 注意：FileUtil.listAllNotes() 返回的是全名，但这里我们需要构建路径判断
+        String potentialFileName = item.getValue() + ".md";
+        File f = new File("notes/" + potentialFileName);
+
+        // 如果文件存在，它是笔记；如果不存在（且它是树上的有效节点），它是空文件夹
+        return !f.exists();
+    }
+
+
+    @FXML
+    private void handleExpandAll() {
+        if (fileTree.getRoot() != null) {
+            setTreeExpanded(fileTree.getRoot(), true);
+        }
+    }
+
+    @FXML
+    private void handleCollapseAll() {
+        if (fileTree.getRoot() != null) {
+            // 如果你希望根节点（Root）保持展开，只折叠子节点，请保留下面这一行：
+            fileTree.getRoot().setExpanded(true);
+            // 遍历子节点进行折叠
+            for (TreeItem<?> child : fileTree.getRoot().getChildren()) {
+                setTreeExpanded(child, false);
+            }
+
+            // 如果你想连根节点也完全折叠，直接用下面这行代替上面所有逻辑：
+            // setTreeExpanded(fileTree.getRoot(), false);
+        }
+    }
+
+    // 递归辅助方法
+    private void setTreeExpanded(TreeItem<?> item, boolean expanded) {
+        item.setExpanded(expanded);
+        if (!item.isLeaf()) {
+            for (TreeItem<?> child : item.getChildren()) {
+                setTreeExpanded(child, expanded);
+            }
+        }
+    }
+
+    // 这里存放帮助文档的内容常量
+    private static final String HELP_MARKDOWN_CONTENT = """
+# DeepMind Note 用户手册
+
+**欢迎使用 DeepMind Note** —— 这是一款专为开发者和知识工作者设计的轻量级、交互式 Markdown 笔记应用。它结合了极简的编辑体验与强大的文件管理功能，助你高效构建知识体系。
+
+---
+
+## 1. 快速入门
+
+### 界面概览
+DeepMind Note 的界面主要分为三个区域：
+* **左侧：文件资源管理器** —— 管理你的笔记文件夹和文件。
+* **中间：编辑/预览区** —— 核心工作区，支持 Markdown 源码编辑和富文本实时预览。
+* **右侧：大纲视图** —— 根据标题自动生成目录，点击可快速跳转。
+
+### 创建第一篇笔记
+1. 点击工具栏的 **“新建笔记”** 按钮（或右键左侧空白处）。
+2. 输入标题（默认文件名自动生成）。
+3. 在中间编辑区开始写作。
+4. 按下 `Ctrl + S` 保存（软件也会在切换焦点时自动保存）。
+
+---
+
+## 2. 核心编辑功能
+
+DeepMind Note 全面支持标准 Markdown 语法。
+
+### 常用格式
+
+| 功能 | 语法示例 | 快捷键/操作 |
+| :--- | :--- | :--- |
+| **标题** | `# 一级标题`, `## 二级标题` | 右键菜单 -> 标题级别 |
+| **加粗** | `**重点内容**` | 右键 -> 加粗 |
+| **斜体** | `*斜体内容*` | 右键 -> 倾斜 |
+| **引用** | `> 引用文本` | 右键 -> 引用块 |
+| **列表** | `- 项目` 或 `1. 项目` | 自动补全（回车自动换行） |
+| **代码块** | \\`\\`\\`java ... \\`\\`\\` | 选中代码 -> 右键代码块 |
+| **高亮** | `==高亮文本==` | 右键 -> 高亮 |
+
+### 图片与文件处理
+DeepMind Note 拥有强大的图片管理功能：
+* **拖拽上传**：直接将图片文件拖入**编辑区**（插入光标处）或**预览区**（追加到文末）。
+* **截图粘贴**：使用系统截图工具截图后，在编辑区按 `Ctrl + V`，图片会自动保存到 `notes/images` 目录并生成 Markdown 链接。
+* **文件粘贴**：复制电脑中的图片文件，直接在编辑器中粘贴即可。
+
+---
+
+## 3. 智能文件管理
+
+### 双向同步重命名
+这是 DeepMind Note 的特色功能：
+* **改标题即改文件名**：在编辑器第一行修改 `# 标题`，文件列表中的文件名会自动同步修改。
+* **改文件名即改标题**：在左侧文件树重命名文件，笔记内容里的 `# 标题` 也会自动更新。
+
+### 分类与移动
+* **虚拟文件夹**：笔记采用 `分类_笔记名.md` 的方式存储，但在软件中以文件夹树的形式展示。
+* **移动笔记**：在左侧树中**拖拽**笔记到不同文件夹，或右键选择“移动到文件夹”，即可轻松整理知识库。
+* **新建文件夹**：点击“新建文件夹”按钮，创建新的分类节点。
+
+### 搜索
+* **全局搜索**：在左侧顶部的搜索框输入关键词，可过滤文件名。
+* **内容查找**：在编辑器中按 `Ctrl + F` 开启查找栏，支持高亮所有匹配项；按 `Ctrl + H` 进行替换。
+* **快速打开**：使用“快速打开”功能（快捷键需自行绑定），弹窗列出所有文件，支持模糊搜索跳转。
+
+---
+
+## 4. 预览与导出
+
+### 模式切换
+* **编辑模式**：专注于源码编写。
+* **预览模式**：查看渲染后的网页效果。
+* **自动切换**：点击预览区的任意位置可进入编辑；编辑完成后点击外部或手动切换可回预览。
+
+### 导出功能
+支持将笔记导出为多种格式，方便分享：
+* **Markdown (.md)**：原始格式。
+* **PDF (.pdf)**：高质量文档，支持中文（基于 Microsoft YaHei 字体）。
+* **Word (.docx)**：办公文档格式。
+* **HTML**：支持导出“带样式网页”或“纯净HTML”。
+* **长图 (.png)**：将整篇笔记生成为一张长图片。
+* **打印**：直接调用系统打印机打印笔记。
+
+---
+
+## 5. 个性化设置
+
+### 主题切换
+在菜单栏中选择 **“主题”**，DeepMind Note 提供三种精心调配的配色：
+1. **暗夜黑**：适合夜间编码，护眼高对比度。
+2. **森系绿**：清新自然，缓解视觉疲劳。
+3. **暖阳橙**：温暖活力，激发创作灵感。
+
+### 界面布局
+* **侧边栏**：点击左上角图标可收起/展开文件树，专注写作。
+* **大纲栏**：点击右上角图标可收起/展开右侧大纲。
+
+---
+
+## 6. 数据存储说明
+
+* **本地存储**：所有笔记均保存在软件运行目录下的 `notes/` 文件夹中。
+* **图片资源**：笔记中的图片保存在 `notes/images/` 中。
+* **备份建议**：由于是纯本地文件，您可以直接复制 `notes` 文件夹进行备份，或使用 Git 进行版本控制。
+
+---
+
+> **关于 DeepMind Note**
+>
+> 开发者：DeepMind Dev Team
+> 版本：v1.0.0 (Preview)
+> *记录思维，连接未来。*
+""";
 }

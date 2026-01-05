@@ -153,10 +153,6 @@
 #btnToggleSidebar:hover {
     -fx-background-color: -color-hover;
 }
-#btnToggleSidebar:selected {
-    -fx-background-color: -color-selection;
-    -fx-text-fill: -color-selection-text;
-}
 
 /* 右侧的主题选择器等微调 */
 .top-bar .separator .line {
@@ -303,4 +299,138 @@
     -fx-background-color: #3b3f42;
     -fx-border-color: #5c5c5c;
     -fx-text-fill: #e0e0e0;
+}
+
+/* ================== 9. IDEA 风格弹窗 (Modern Dialog) ================== */
+
+/* 弹窗容器：圆角、阴影、跟随主题背景 */
+.modern-dialog-root {
+    -fx-background-color: -color-bg-panel;  /* 跟随侧边栏背景色 */
+    -fx-border-color: -color-border;        /* 跟随边框色 */
+    -fx-border-width: 1px;
+    -fx-background-radius: 8px;
+    -fx-border-radius: 8px;
+    /* 强烈的阴影，营造悬浮感 */
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 20, 0, 0, 10);
+    -fx-padding: 20;
+    -fx-min-width: 420px;
+}
+
+/* 标题文字 */
+.modern-dialog-title {
+    -fx-text-fill: -color-text-main;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 10 0;
+}
+
+/* 消息内容文字 */
+.modern-dialog-message {
+    -fx-text-fill: -color-text-muted;
+    -fx-font-size: 14px;
+    -fx-padding: 0 0 20 0;
+    -fx-wrap-text: true;
+}
+
+/* 输入框 (重命名/新建文件夹时用) */
+.modern-dialog-input {
+    -fx-background-color: -color-bg-base;
+    -fx-text-fill: -color-text-main;
+    -fx-border-color: -color-border;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 8;
+}
+.modern-dialog-input:focused {
+    -fx-border-color: -color-primary; /* 聚焦时变成主题色 */
+    -fx-effect: dropshadow(three-pass-box, -color-selection, 5, 0, 0, 0);
+}
+
+/* 底部按钮栏 */
+.modern-dialog-btn-bar {
+    -fx-alignment: CENTER_RIGHT; /* IDEA 风格：按钮靠右 */
+    -fx-spacing: 12;
+}
+
+/* 按钮基础样式 */
+.dialog-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: -color-text-main;
+    -fx-border-color: -color-border;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+    -fx-padding: 6 16;
+    -fx-font-size: 13px;
+}
+
+/* 取消按钮：简单的边框，悬停变深 */
+.dialog-btn-cancel:hover {
+    -fx-background-color: -color-hover;
+}
+
+/* 确定按钮 (普通)：主题色背景，白色文字 */
+.dialog-btn-confirm {
+    -fx-background-color: -color-primary;
+    -fx-text-fill: white;
+    -fx-border-color: transparent;
+}
+.dialog-btn-confirm:hover {
+    -fx-opacity: 0.9;
+}
+
+/* 危险操作按钮 (删除)：红色背景 */
+.dialog-btn-danger {
+    -fx-background-color: #e55353; /* 警戒红 */
+    -fx-text-fill: white;
+    -fx-border-color: transparent;
+}
+.dialog-btn-danger:hover {
+    -fx-background-color: #d93737;
+}
+
+/* ... 接在 .status-btn 样式之后 ... */
+
+/* --- 修复状态栏 ToggleButton 点击变色问题 --- */
+
+.status-toggle {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 4 8;  /* 调整大小以匹配周围元素 */
+    -fx-cursor: hand;
+    -fx-background-radius: 4;
+}
+
+/* 关键：覆盖全局的 Selected 样式 */
+/* 当 selected="true" 时，背景强制透明，而不是变蓝 */
+.status-toggle:selected {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+
+/* 覆盖 Pressed (按下瞬间) */
+.status-toggle:pressed {
+    -fx-background-color: transparent;
+}
+
+/* 悬停 (Hover) - 保留淡淡的背景色以便用户知道鼠标放上去了 */
+/* 如果你连悬停色都不想要，把下面改成 transparent */
+.status-toggle:hover {
+    -fx-background-color: -color-hover;
+}
+
+/* 既选中又悬停时 - 保持悬停色 */
+.status-toggle:selected:hover {
+    -fx-background-color: -color-hover;
+}
+
+/* 修复聚焦时的虚线框 (如果有的话) */
+.status-toggle:focused {
+    -fx-background-insets: 0;
+    -fx-background-color: transparent;
+}
+
+/* 修复 TreeView 左侧箭头颜色不可见的问题 */
+.tree-cell .tree-disclosure-node .arrow {
+    -fx-background-color: -fx-text-fill;
 }
