@@ -12,6 +12,7 @@ import javafx.scene.image.Image;
 import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.SVGPath;
 import javafx.scene.web.WebView;
 
 import javax.imageio.ImageIO;
@@ -48,6 +49,9 @@ public class MainController {
 
     @FXML private ToggleButton btnToggleSidebar;
     @FXML private MenuBar mainMenuBar;
+
+    // 定义常量
+    private static final String ICON_CODE = "M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z";
 
     // --- 状态变量 ---
     private String currentNoteTitle = "";
@@ -294,30 +298,7 @@ public class MainController {
             return null;
         }
     }
-
-    private void setupFindFeature() {
-        // 1. 定义通用更新器 (只更新计数标签，不移动光标)
-        javafx.beans.InvalidationListener counterUpdater = o -> updateMatchStatus(false);
-
-        // 2. 监听光标移动、模式切换 -> 只更新计数
-        editorArea.caretPositionProperty().addListener(counterUpdater);
-        editorArea.visibleProperty().addListener((obs, oldVal, newVisible) -> {
-            if (editorFindPane.isVisible()) {
-                if (newVisible) updateMatchStatus(true); // 切回编辑模式，尝试高亮当前
-                else javafx.application.Platform.runLater(() -> updateMatchStatus(true)); // 切到预览，执行JS
-            }
-        });
-
-        // 3. 【核心修改】监听输入框文字变化 -> 实时选中 + 更新计数
-        editorFindField.textProperty().addListener((obs, oldVal, newVal) -> {
-            // 输入文字时，强制执行一次“从头查找并选中”
-            handleIncrementalSearch(newVal);
-        });
-
-        // 4. 回车 -> 查找下一个
-        editorFindField.setOnAction(e -> findNext());
-    }
-
+    private static final String ICON_PREVIEW = "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z";
     /**
      * 辅助方法：插入 Markdown 图片语法
      */
@@ -577,268 +558,8 @@ public class MainController {
         editorArea.setVisible(false);
         webView.setVisible(true);
     }
-
-
-    /**
-     * 核心：更新预览区
-     * 1. 解析 Markdown
-     * 2. 获取当前主题 CSS
-     * 3. 注入 JS (高亮支持)
-     * 4. 渲染到 WebView
-     */
-    //private void updatePreview() {
-    //    String mdContent = editorArea.getText();
-    //    if (mdContent == null) mdContent = "";
-    //
-    //    // 1. 解析 Markdown -> HTML 片段
-    //    String markdownHtml = MarkdownParser.parse(mdContent);
-    //
-    //    // 2. 获取当前主题对应的 CSS (核心修改)
-    //    String themeCss = getThemeRenderCss();
-    //
-    //    // 3. 准备 Base URL (用于加载本地图片)
-    //    File notesDir = new File("notes/");
-    //    String baseUrl = notesDir.toURI().toString();
-    //
-    //    // 4. 准备 JavaScript (搜索高亮功能，保持不变)
-    //    String jsScript = """
-    //        <script>
-    //            function removeHighlights() {
-    //                const highlights = document.querySelectorAll('span.search-highlight');
-    //                highlights.forEach(span => {
-    //                    const parent = span.parentNode;
-    //                    parent.replaceChild(document.createTextNode(span.textContent), span);
-    //                    parent.normalize();
-    //                });
-    //            }
-    //            function highlightAll(keyword) {
-    //                removeHighlights();
-    //                if (!keyword) return 0;
-    //                const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-    //                const nodes = [];
-    //                while(walk.nextNode()) nodes.push(walk.currentNode);
-    //                let count = 0;
-    //                const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-    //                const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
-    //                nodes.forEach(node => {
-    //                    if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
-    //                    const text = node.nodeValue;
-    //                    if (regex.test(text)) {
-    //                        const fragment = document.createDocumentFragment();
-    //                        let lastIdx = 0;
-    //                        text.replace(regex, (match, p1, offset) => {
-    //                            fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
-    //                            const span = document.createElement('span');
-    //                            span.className = 'search-highlight';
-    //                            span.textContent = match;
-    //                            if (count === 0) span.id = 'first-match';
-    //                            fragment.appendChild(span);
-    //                            lastIdx = offset + match.length;
-    //                            count++;
-    //                        });
-    //                        fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
-    //                        node.parentNode.replaceChild(fragment, node);
-    //                    }
-    //                });
-    //                const first = document.getElementById('first-match');
-    //                if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
-    //                return count;
-    //            }
-    //
-    //                // --- 3. 跳转到第 N 个查找结果 (用于 FindNext) ---
-    //                function scrollToMatch(index) {
-    //                     const highlights = document.querySelectorAll('span.search-highlight');
-    //                     if (highlights.length === 0) return -1;
-    //
-    //                     // 循环逻辑
-    //                     if (index >= highlights.length) index = 0;
-    //                     if (index < 0) index = highlights.length - 1;
-    //
-    //                     // 重置颜色
-    //                     highlights.forEach(span => span.style.backgroundColor = "#ffeb3b");
-    //
-    //                     // 选中目标
-    //                     const target = highlights[index];
-    //                     target.style.backgroundColor = "#ff9800"; // 橙色选中
-    //                     target.scrollIntoView({behavior: "smooth", block: "center"});
-    //                     return index;
-    //                }
-    //
-    //                // --- 4. 跳转到大纲标题 (用于 Outline) ---
-    //                function scrollToHeading(index) {
-    //                    const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    //                    if (headers[index]) {
-    //                        headers[index].scrollIntoView({behavior: "smooth", block: "start"});
-    //
-    //                        // 闪烁效果 (直接用具体颜色，防止 var 变量失效)
-    //                        headers[index].style.transition = "background-color 0.5s";
-    //                        const originalBg = headers[index].style.backgroundColor;
-    //                        headers[index].style.backgroundColor = "var(--flash-bg)"; // 浅黄闪烁
-    //                        setTimeout(() => {
-    //                            headers[index].style.backgroundColor = originalBg;
-    //                        }, 1000);
-    //                    }
-    //                }
-    //        </script>
-    //        """;
-    //
-    //    // 5. 组装最终的完整 HTML
-    //    String fullHtml = "<!DOCTYPE html>"
-    //            + "<html>"
-    //            + "<head>"
-    //            + "    <meta charset=\"UTF-8\">"
-    //            + "    <base href=\"" + baseUrl + "\">"
-    //            + "    <style>"
-    //            + themeCss
-    //            + "        /* 强制高亮样式，确保可见 */"
-    //            + "        .search-highlight { background-color: #ffeb3b !important; color: #000 !important; }"
-    //            + "    </style>"
-    //            + "</head>"
-    //            + "<body>"
-    //            + markdownHtml
-    //            + jsScript
-    //            + "</body>"
-    //            + "</html>";
-    //
-    //    // 6. 错误监控 (方便调试)
-    //    webView.getEngine().setOnError(event -> System.err.println("JS Error: " + event.getMessage()));
-    //
-    //
-    //
-    //    // 7. 绑定加载监听器 (这是取代 Timeline 的关键)
-    //    webView.getEngine().getLoadWorker().stateProperty().removeListener(this::onWebViewLoadStateChanged);
-    //    webView.getEngine().getLoadWorker().stateProperty().addListener(this::onWebViewLoadStateChanged);
-    //
-    //    // 8. 开始加载
-    //    webView.getEngine().loadContent(fullHtml);
-    //}
-
-    private void updatePreview() {
-        String mdContent = editorArea.getText();
-        if (mdContent == null) mdContent = "";
-
-        // 1. 解析 Markdown
-        String markdownHtml = MarkdownParser.parse(mdContent);
-
-        // 2. 获取主题 CSS
-        String themeCss = getThemeRenderCss();
-
-        // 3. Base URL
-        File notesDir = new File("notes/");
-        String baseUrl = notesDir.toURI().toString();
-
-        // 4. --- 生成自动滚动和显形的 JS ---
-        // 关键：Locale.US 确保小数是点号 (0.5) 而不是逗号
-        String scrollLogic = "";
-        if (pendingScrollRatio >= 0) {
-            String ratioStr = String.format(java.util.Locale.US, "%.4f", pendingScrollRatio);
-            scrollLogic = """
-                try {
-                    var ratio = %s;
-                    var h = document.body.scrollHeight;
-                    var v = window.innerHeight;
-                    if (ratio <= 0.05) window.scrollTo(0, 0);
-                    else if (ratio >= 0.95) window.scrollTo(0, h);
-                    else window.scrollTo(0, (h - v) * ratio);
-                } catch(e) { console.error(e); }
-                """.formatted(ratioStr);
-            pendingScrollRatio = -1; // 用完即弃
-        }
-
-        // 5. 组装 JS
-        String jsScript = """
-            <script>
-                // 搜索高亮逻辑 (保留你原来的代码)
-                function removeHighlights() {
-                    const highlights = document.querySelectorAll('span.search-highlight');
-                    highlights.forEach(span => {
-                        const parent = span.parentNode;
-                        parent.replaceChild(document.createTextNode(span.textContent), span);
-                        parent.normalize();
-                    });
-                }
-                function highlightAll(keyword) {
-                    removeHighlights();
-                    if (!keyword) return 0;
-                    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                    const nodes = [];
-                    while(walk.nextNode()) nodes.push(walk.currentNode);
-                    let count = 0;
-                    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-                    const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
-                    nodes.forEach(node => {
-                        if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
-                        const text = node.nodeValue;
-                        if (regex.test(text)) {
-                            const fragment = document.createDocumentFragment();
-                            let lastIdx = 0;
-                            text.replace(regex, (match, p1, offset) => {
-                                fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
-                                const span = document.createElement('span');
-                                span.className = 'search-highlight';
-                                span.textContent = match;
-                                if (count === 0) span.id = 'first-match';
-                                fragment.appendChild(span);
-                                lastIdx = offset + match.length;
-                                count++;
-                            });
-                            fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
-                            node.parentNode.replaceChild(fragment, node);
-                        }
-                    });
-                    const first = document.getElementById('first-match');
-                    if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
-                    return count;
-                }
-                function scrollToHeading(index) {
-                    const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                    if (headers[index]) {
-                        headers[index].scrollIntoView({behavior: "smooth", block: "start"});
-                        headers[index].style.transition = "background-color 0.5s";
-                        const originalBg = headers[index].style.backgroundColor;
-                        headers[index].style.backgroundColor = "var(--flash-bg)";
-                        setTimeout(() => { headers[index].style.backgroundColor = originalBg; }, 1000);
-                    }
-                }
-
-                // --- 核心：页面加载完成后执行滚动并显示 ---
-                window.addEventListener('load', function() {
-                    // 1. 执行滚动计算 (瞬间完成)
-                    %s
-                    
-                    // 2. 显示页面 (解除透明状态)
-                    document.body.style.opacity = '1';
-                });
-
-                // --- 双重保险：防止 JS 报错导致永久白屏 ---
-                setTimeout(function() {
-                     document.body.style.opacity = '1';
-                }, 300);
-            </script>
-            """.formatted(scrollLogic);
-
-        String fullHtml = "<!DOCTYPE html>"
-                + "<html>"
-                + "<head>"
-                + "    <meta charset=\"UTF-8\">"
-                + "    <base href=\"" + baseUrl + "\">"
-                + "    <style>"
-                + themeCss
-                + "        .search-highlight { background-color: #ffeb3b !important; color: #000 !important; }"
-                + "    </style>"
-                + "</head>"
-                + "<body>"
-                + markdownHtml
-                + jsScript
-                + "</body>"
-                + "</html>";
-
-        // 绑定 LoadWorker 监听器 (只负责 Java 端的保险逻辑，不再负责滚动)
-        webView.getEngine().getLoadWorker().stateProperty().removeListener(this::onWebViewLoadStateChanged);
-        webView.getEngine().getLoadWorker().stateProperty().addListener(this::onWebViewLoadStateChanged);
-
-        webView.getEngine().loadContent(fullHtml);
-    }
+    @FXML
+    private SVGPath editModeIcon;
 
     /**
      * WebView 加载状态监听 (只有在这里执行 JS 才是 100% 安全的)
@@ -2506,61 +2227,178 @@ public class MainController {
         editorFindField.requestFocus();
     }
 
-    @FXML
-    private void findPrevious() {
-        String query = editorFindField.getText();
-        if (query == null || query.isEmpty()) return;
+    private void setupFindFeature() {
+        // 1. 通用更新器
+        javafx.beans.InvalidationListener counterUpdater = o -> updateMatchStatus(false);
 
-        String content = editorArea.getText();
-
-        // 获取当前选中的起始位置 (如果没有选中，则为光标位置)
-        // 我们要从这个位置的前一个字符开始往回找
-        int currentPos = editorArea.getSelection().getStart();
-
-        // 核心逻辑：倒序查找 lastIndexOf
-        // 从 currentPos - 1 开始往前找
-        int index = content.lastIndexOf(query, currentPos - 1);
-
-        if (index != -1) {
-            selectAndScrollTo(index, query.length());
-        } else {
-            // 没找到：循环查找，从文本末尾开始找
-            // flashNode(editorFindField); // 可选：给个输入框闪烁提示没找到
-            int retry = content.lastIndexOf(query);
-            if (retry != -1) {
-                selectAndScrollTo(retry, query.length());
+        // 2. 监听光标、模式切换
+        editorArea.caretPositionProperty().addListener(counterUpdater);
+        editorArea.visibleProperty().addListener((obs, oldVal, newVisible) -> {
+            if (editorFindPane.isVisible()) {
+                if (newVisible) updateMatchStatus(true);
+                else javafx.application.Platform.runLater(() -> updateMatchStatus(true));
             }
-        }
-        updateMatchStatus(true);
-    }
-    // 查找下一个 (↓ 按钮触发)
-    @FXML
-    private void findNext() {
-        String query = editorFindField.getText();
-        if (query == null || query.isEmpty()) return;
+        });
 
-        String content = editorArea.getText();
-
-        // 获取当前光标位置 (或选区结束位置)
-        // 从这个位置往后找
-        int currentPos = editorArea.getCaretPosition();
-
-        // 核心逻辑：正序查找 indexOf
-        int index = content.indexOf(query, currentPos);
-
-        if (index != -1) {
-            selectAndScrollTo(index, query.length());
-        } else {
-            // 没找到：循环查找，从文本开头开始找
-            int retry = content.indexOf(query);
-            if (retry != -1) {
-                selectAndScrollTo(retry, query.length());
+        // 3. 【核心修改】监听输入框文字变化
+        editorFindField.textProperty().addListener((obs, oldVal, newVal) -> {
+            // 如果文字被清空了，必须专门处理清理逻辑
+            if (newVal == null || newVal.isEmpty()) {
+                clearHighlights(); // 专门提取一个清理方法
+            } else {
+                handleIncrementalSearch(newVal);
             }
-        }
+        });
 
-        updateMatchStatus(true);
+        // 4. 回车
+        editorFindField.setOnAction(e -> findNext());
     }
 
+    private void updatePreview() {
+        String mdContent = editorArea.getText();
+        if (mdContent == null) mdContent = "";
+
+        // 1. 解析 Markdown
+        String markdownHtml = MarkdownParser.parse(mdContent);
+
+        // 2. 获取主题 CSS
+        String themeCss = getThemeRenderCss();
+
+        // 3. Base URL
+        File notesDir = new File("notes/");
+        String baseUrl = notesDir.toURI().toString();
+
+        // 4. --- 生成自动滚动和显形的 JS ---
+        // 关键：Locale.US 确保小数是点号 (0.5) 而不是逗号
+        String scrollLogic = "";
+        if (pendingScrollRatio >= 0) {
+            String ratioStr = String.format(java.util.Locale.US, "%.4f", pendingScrollRatio);
+            scrollLogic = """
+                try {
+                    var ratio = %s;
+                    var h = document.body.scrollHeight;
+                    var v = window.innerHeight;
+                    if (ratio <= 0.05) window.scrollTo(0, 0);
+                    else if (ratio >= 0.95) window.scrollTo(0, h);
+                    else window.scrollTo(0, (h - v) * ratio);
+                } catch(e) { console.error(e); }
+                """.formatted(ratioStr);
+            pendingScrollRatio = -1; // 用完即弃
+        }
+
+        // 5. 组装 JS
+        String jsScript = """
+            <script>
+                // 搜索高亮逻辑 (保留你原来的代码)
+                function removeHighlights() {
+                    const highlights = document.querySelectorAll('span.search-highlight');
+                    highlights.forEach(span => {
+                        const parent = span.parentNode;
+                        parent.replaceChild(document.createTextNode(span.textContent), span);
+                        parent.normalize();
+                    });
+                }
+                function highlightAll(keyword) {
+                    removeHighlights();
+                    if (!keyword) return 0;
+                    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                    const nodes = [];
+                    while(walk.nextNode()) nodes.push(walk.currentNode);
+                    let count = 0;
+                    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+                    const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
+                    nodes.forEach(node => {
+                        if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
+                        const text = node.nodeValue;
+                        if (regex.test(text)) {
+                            const fragment = document.createDocumentFragment();
+                            let lastIdx = 0;
+                            text.replace(regex, (match, p1, offset) => {
+                                fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
+                                const span = document.createElement('span');
+                                span.className = 'search-highlight';
+                                span.textContent = match;
+                                if (count === 0) span.id = 'first-match';
+                                fragment.appendChild(span);
+                                lastIdx = offset + match.length;
+                                count++;
+                            });
+                            fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
+                            node.parentNode.replaceChild(fragment, node);
+                        }
+                    });
+                    const first = document.getElementById('first-match');
+                    if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
+                    return count;
+                }
+                function scrollToHeading(index) {
+                    const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    if (headers[index]) {
+                        headers[index].scrollIntoView({behavior: "smooth", block: "start"});
+                        headers[index].style.transition = "background-color 0.5s";
+                        const originalBg = headers[index].style.backgroundColor;
+                        headers[index].style.backgroundColor = "var(--flash-bg)";
+                        setTimeout(() => { headers[index].style.backgroundColor = originalBg; }, 1000);
+                    }
+                }
+
+                // --- 核心：页面加载完成后执行滚动并显示 ---
+                window.addEventListener('load', function() {
+                    // 1. 执行滚动计算 (瞬间完成)
+                    %s
+                    
+                    // 2. 显示页面 (解除透明状态)
+                    document.body.style.opacity = '1';
+                });
+
+                // --- 双重保险：防止 JS 报错导致永久白屏 ---
+                setTimeout(function() {
+                     document.body.style.opacity = '1';
+                }, 300);
+                      function scrollToMatch(index) {
+                                         const highlights = document.querySelectorAll('span.search-highlight');
+                                         if (highlights.length === 0) return -1;
+                
+                                         // 循环逻辑：超限归零，负数去末尾
+                                         if (index >= highlights.length) index = 0;
+                                         if (index < 0) index = highlights.length - 1;
+                
+                                         // 重置颜色为黄色
+                                         highlights.forEach(span => span.style.backgroundColor = "#ffeb3b");\s
+                
+                                         // 选中目标为橙色
+                                         const target = highlights[index];
+                                         target.style.backgroundColor = "#ff9800";\s
+                                         target.style.color = "white"; // 文字白色更清晰
+                                         target.scrollIntoView({behavior: "smooth", block: "center"});
+                
+                                         return index; // 返回修正后的索引
+                                    }    
+            </script>
+            """.formatted(scrollLogic);
+
+        String fullHtml = "<!DOCTYPE html>"
+                + "<html>"
+                + "<head>"
+                + "    <meta charset=\"UTF-8\">"
+                + "    <base href=\"" + baseUrl + "\">"
+                + "    <style>"
+                + themeCss
+                + "        .search-highlight { background-color: #ffeb3b !important; color: #000 !important; }"
+                + "    </style>"
+                + "</head>"
+                + "<body>"
+                + markdownHtml
+                + jsScript
+                + "</body>"
+                + "</html>";
+
+        // 绑定 LoadWorker 监听器 (只负责 Java 端的保险逻辑，不再负责滚动)
+        webView.getEngine().getLoadWorker().stateProperty().removeListener(this::onWebViewLoadStateChanged);
+        webView.getEngine().getLoadWorker().stateProperty().addListener(this::onWebViewLoadStateChanged);
+
+        webView.getEngine().loadContent(fullHtml);
+    }
     private void selectAndScrollTo(int index, int length) {
         // 1. 必须先让编辑器获取焦点，否则用户看不见光标闪烁
         editorArea.requestFocus();
@@ -2597,13 +2435,94 @@ public class MainController {
         }
     }
 
+    /**
+     * 查找上一个 (↑ 按钮触发)
+     */
     @FXML
-    private void closeFindPane() {
-        editorFindPane.setVisible(false);
-        editorFindPane.setManaged(false);
-        editorArea.requestFocus();
+    private void findPrevious() {
+        String query = editorFindField.getText();
+        if (query == null || query.isEmpty()) return;
+
+        // =================================================
+        // 场景 A: 编辑器模式 (TextArea)
+        // =================================================
+        if (editorArea.isVisible()) {
+            String content = editorArea.getText();
+            // 从选区头部开始往前找
+            int currentPos = editorArea.getSelection().getStart();
+            int index = content.lastIndexOf(query, currentPos - 1);
+
+            if (index != -1) {
+                selectAndScrollTo(index, query.length());
+            } else {
+                // 循环查找：从尾部开始
+                int retry = content.lastIndexOf(query);
+                if (retry != -1) selectAndScrollTo(retry, query.length());
+            }
+            updateMatchStatus(true);
+        }
+
+        // =================================================
+        // 场景 B: 预览模式 (WebView)
+        // =================================================
+        else if (webView.isVisible()) {
+            // 1. 索引减 1
+            lastWebSearchIndex--;
+
+            // 2. 调用 JS (JS 会处理负数变成最后一个的情况)
+            Object result = webView.getEngine().executeScript("scrollToMatch(" + lastWebSearchIndex + ")");
+
+            // 3. 更新本地索引和 UI
+            if (result instanceof Integer) {
+                lastWebSearchIndex = (Integer) result;
+                refreshWebViewLabelCount(); // 更新 "第 X / Y 个"
+            }
+        }
     }
 
+    /**
+     * 查找下一个 (↓ 按钮触发)
+     */
+    @FXML
+    private void findNext() {
+        String query = editorFindField.getText();
+        if (query == null || query.isEmpty()) return;
+
+        // =================================================
+        // 场景 A: 编辑器模式 (TextArea)
+        // =================================================
+        if (editorArea.isVisible()) {
+            String content = editorArea.getText();
+            int currentPos = editorArea.getCaretPosition();
+            int index = content.indexOf(query, currentPos);
+
+            if (index != -1) {
+                selectAndScrollTo(index, query.length());
+            } else {
+                // 循环查找：从头开始
+                int retry = content.indexOf(query);
+                if (retry != -1) selectAndScrollTo(retry, query.length());
+            }
+            updateMatchStatus(true);
+        }
+
+        // =================================================
+        // 场景 B: 预览模式 (WebView)
+        // =================================================
+        else if (webView.isVisible()) {
+            // 1. 索引加 1
+            lastWebSearchIndex++;
+
+            // 2. 调用 JS
+            Object result = webView.getEngine().executeScript("scrollToMatch(" + lastWebSearchIndex + ")");
+
+            // 3. 更新本地索引和 UI
+            if (result instanceof Integer) {
+                lastWebSearchIndex = (Integer) result;
+                refreshWebViewLabelCount();
+            }
+        }
+    }
     // =====================================================
     // 1. 文本操作辅助方法 (核心引擎)
     // =====================================================
@@ -2925,63 +2844,12 @@ public class MainController {
     //    }
     //}
 
-
-    private void showEditor(boolean editMode) {
-        if (editorArea.isVisible() == editMode) return;
-
-        // === 1. 记录当前位置比例 (0.0 ~ 1.0) ===
-        double currentRatio = 0;
-
-        if (editorArea.isVisible()) {
-            // 编辑器 -> 预览
-            ScrollBar vBar = (ScrollBar) editorArea.lookup(".scroll-bar:vertical");
-            if (vBar != null && vBar.getMax() > 0) {
-                currentRatio = vBar.getValue() / vBar.getMax();
-            }
-        } else if (webView.isVisible()) {
-            // 预览 -> 编辑器
-            try {
-                int scrollTop = (Integer) webView.getEngine().executeScript("document.documentElement.scrollTop || document.body.scrollTop");
-                int scrollHeight = (Integer) webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
-                int clientHeight = (Integer) webView.getEngine().executeScript("document.documentElement.clientHeight || document.body.clientHeight");
-                int maxScrollable = scrollHeight - clientHeight;
-                if (maxScrollable > 0) {
-                    currentRatio = (double) scrollTop / maxScrollable;
-                }
-            } catch (Exception e) {
-                currentRatio = 0;
-            }
-        }
-
-        // === 2. 切换界面 ===
-        editorArea.setVisible(editMode);
-        editorArea.setManaged(editMode);
-        webView.setVisible(!editMode);
-        webView.setManaged(!editMode);
-
-        // === 3. 恢复位置 ===
-        if (editMode) {
-            // ---> 切回编辑器
-            editorArea.requestFocus();
-            final double targetRatio = currentRatio;
-            javafx.application.Platform.runLater(() -> {
-                ScrollBar vBar = (ScrollBar) editorArea.lookup(".scroll-bar:vertical");
-                if (vBar != null) {
-                    if (targetRatio <= 0.05) vBar.setValue(0);
-                    else if (targetRatio >= 0.95) vBar.setValue(vBar.getMax());
-                    else vBar.setValue(targetRatio * vBar.getMax());
-                }
-            });
-        } else {
-            // ---> 切回预览
-            try { handleSave(); } catch (Exception e) {}
-
-            pendingScrollRatio = currentRatio;
-
-            // 【关键】这里不需要手动 setOpacity(0) 了
-            // 因为 getThemeRenderCss 里生成的 CSS 默认 body opacity 就是 0
-            updatePreview();
-        }
+    @FXML
+    private void closeFindPane() {
+        editorFindPane.setVisible(false);
+        editorFindPane.setManaged(false);
+        editorArea.requestFocus();
+        clearHighlights();
     }
 
     /**
@@ -3688,4 +3556,116 @@ DeepMind Note 拥有强大的图片管理功能：
         );
     }
 
+    /**
+     * 仅刷新 WebView 的计数 Label (不重跑高亮)
+     */
+    private void refreshWebViewLabelCount() {
+        try {
+            // 获取总匹配数
+            Object countObj = webView.getEngine().executeScript("document.querySelectorAll('span.search-highlight').length");
+            int total = (Integer) countObj;
+
+            if (total == 0) {
+                lblMatchCount.setText("无结果");
+                lblMatchCount.setStyle("-fx-text-fill: #ff6b6b;");
+            } else {
+                // 显示：第 (Index+1) 个 / 共 Total 个
+                lblMatchCount.setText(String.format("%d / %d", lastWebSearchIndex + 1, total));
+                lblMatchCount.setStyle("-fx-text-fill: #999;");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void showEditor(boolean editMode) {
+        if (editorArea.isVisible() == editMode) return;
+
+        // === 1. 记录当前位置比例 (0.0 ~ 1.0) ===
+        double currentRatio = 0;
+
+        if (editorArea.isVisible()) {
+            // 编辑器 -> 预览
+            ScrollBar vBar = (ScrollBar) editorArea.lookup(".scroll-bar:vertical");
+            if (vBar != null && vBar.getMax() > 0) {
+                currentRatio = vBar.getValue() / vBar.getMax();
+                updateEditModeIcon(false);
+            }
+        } else if (webView.isVisible()) {
+            // 预览 -> 编辑器
+            try {
+                int scrollTop = (Integer) webView.getEngine().executeScript("document.documentElement.scrollTop || document.body.scrollTop");
+                int scrollHeight = (Integer) webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
+                int clientHeight = (Integer) webView.getEngine().executeScript("document.documentElement.clientHeight || document.body.clientHeight");
+                int maxScrollable = scrollHeight - clientHeight;
+                if (maxScrollable > 0) {
+                    currentRatio = (double) scrollTop / maxScrollable;
+                }
+            } catch (Exception e) {
+                currentRatio = 0;
+            }
+            updateEditModeIcon(true);
+        }
+
+        // === 2. 切换界面 ===
+        editorArea.setVisible(editMode);
+        editorArea.setManaged(editMode);
+        webView.setVisible(!editMode);
+        webView.setManaged(!editMode);
+
+        // === 3. 恢复位置 ===
+        if (editMode) {
+            // ---> 切回编辑器
+            editorArea.requestFocus();
+            final double targetRatio = currentRatio;
+            javafx.application.Platform.runLater(() -> {
+                ScrollBar vBar = (ScrollBar) editorArea.lookup(".scroll-bar:vertical");
+                if (vBar != null) {
+                    if (targetRatio <= 0.05) vBar.setValue(0);
+                    else if (targetRatio >= 0.95) vBar.setValue(vBar.getMax());
+                    else vBar.setValue(targetRatio * vBar.getMax());
+                }
+            });
+        } else {
+            // ---> 切回预览
+            try { handleSave(); } catch (Exception e) {}
+
+            pendingScrollRatio = currentRatio;
+
+            // 【关键】这里不需要手动 setOpacity(0) 了
+            // 因为 getThemeRenderCss 里生成的 CSS 默认 body opacity 就是 0
+            updatePreview();
+        }
+    }
+
+    /**
+     * 清除查找高亮 (同时处理 编辑器 和 WebView)
+     */
+    private void clearHighlights() {
+        // 1. 清空计数标签
+        lblMatchCount.setText("");
+
+        // 2. 如果是 WebView 模式，调用 JS 清除高亮
+        if (webView.isVisible()) {
+            // 这是一个极轻量的操作，无需刷新页面
+            webView.getEngine().executeScript("if(window.removeHighlights) removeHighlights();");
+        }
+
+        // 3. 如果是 编辑器模式，清除选区 (可选，看个人喜好)
+        if (editorArea.isVisible()) {
+            editorArea.deselect();
+        }
+    }
+
+    // 在 handleEditMode 或 onSwitchToEditMode 中调用
+    private void updateEditModeIcon(boolean isEditMode) {
+        if (isEditMode) {
+            // 当前是编辑模式，显示“眼睛”图标，提示可以去预览
+            editModeIcon.setContent(ICON_PREVIEW);
+            // editModeIcon.setFill(Color.web("#6c757d")); // 只有 Fill 模式才设置颜色
+        } else {
+            // 当前是预览模式，显示“代码”图标，提示可以回源码
+            editModeIcon.setContent(ICON_CODE);
+        }
+    }
 }

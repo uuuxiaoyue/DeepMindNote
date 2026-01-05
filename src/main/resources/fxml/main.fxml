@@ -112,9 +112,9 @@
                 <RadioMenuItem onAction="#handleThemeMenuAction" text="暖阳橙" toggleGroup="$themeGroup"/>
             </Menu>
             <Menu text="帮助(_H)">
-                <MenuItem text="用户手册" onAction="#handleOpenHelp"/>
+                <MenuItem onAction="#handleOpenHelp" text="用户手册"/>
                 <SeparatorMenuItem />
-                <MenuItem text="关于" onAction="#handleAbout"/>
+                <MenuItem onAction="#handleAbout" text="关于"/>
             </Menu>
         </MenuBar>
 
@@ -218,8 +218,8 @@
                 <Label fx:id="wordCountLabel" styleClass="text-muted" text="字数: 0"/>
 
                 <Region HBox.hgrow="ALWAYS"/>
-                <ToggleButton fx:id="btnToggleSidebar" styleClass="status-toggle" onAction="#handleToggleSidebar" prefHeight="0.0" prefWidth="54.0"
-                              selected="true">
+                <ToggleButton fx:id="btnToggleSidebar" onAction="#handleToggleSidebar" prefHeight="28.0"
+                              prefWidth="44.0" selected="true" styleClass="status-toggle">
                     <tooltip>
                         <Tooltip text="显示/隐藏侧边栏"/>
                     </tooltip>
@@ -230,12 +230,19 @@
                     </graphic>
                 </ToggleButton>
 
-                <Button onAction="#handleEditMode" styleClass="status-btn"  focusTraversable="false" text="&lt;/&gt;">
+                <Button focusTraversable="false" maxWidth="32.0" minWidth="32.0" onAction="#handleEditMode"
+                        prefHeight="21.0" prefWidth="32.0" styleClass="status-btn">
                     <tooltip>
                         <Tooltip text="切换模式"/>
                     </tooltip>
+                    <graphic>
+                        <SVGPath fx:id="editModeIcon"
+                                 content="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"
+                                 fill="TRANSPARENT" stroke="#a4a4a4"/>
+                    </graphic>
                 </Button>
-                <ToggleButton styleClass="status-toggle" onAction="#toggleOutline" selected="true">
+                <ToggleButton onAction="#toggleOutline" prefHeight="28.0" prefWidth="52.0" selected="true"
+                              styleClass="status-toggle">
                     <graphic>
                         <SVGPath
                                 content="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M15 4v16"
