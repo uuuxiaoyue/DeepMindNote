@@ -203,6 +203,9 @@
     -fx-background-color: transparent;
     -fx-display-caret: true;
     -fx-font-size: 14px;
+
+    -fx-highlight-fill: -color-selection;       /* 选中背景色 */
+    -fx-highlight-text-fill: -color-selection-text; /* 选中文字色 */
 }
 .text-area .content {
     -fx-background-color: -color-bg-base;

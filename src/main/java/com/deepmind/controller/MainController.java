@@ -82,12 +82,18 @@ public class MainController {
         setupPasteLogic();
         setupFindFeature();
 
-        // 1. 点击 WebView 进入编辑模式
-        //webView.setOnMouseClicked(event -> {
-        //    if (event.getClickCount() == 1) {
-        //        showEditor(true);
-        //    }
-        //});
+         //1. 点击 WebView 进入编辑模式
+        webView.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 3) {
+                handleEditMode();
+            }
+        });
+
+        editorArea.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 3) {
+                handleEditMode();
+            }
+        });
 
         // 2. TextArea 失去焦点时自动回到预览模式并保存
         editorArea.focusedProperty().addListener((obs, oldVal, newVal) -> {
@@ -559,110 +565,6 @@ public class MainController {
         webView.setVisible(true);
     }
 
-    //private void updatePreview() {
-    //    String mdContent = editorArea.getText();
-    //    if (mdContent == null) mdContent = "";
-    //    // 1. 解析 Markdown
-    //    String markdownHtml = MarkdownParser.parse(mdContent);
-    //
-    //    // 2. 检查当前是否是暗色模式
-    //    // (简单的判断方法：看 rootContainer 的样式类里有没有 theme-dark)
-    //    boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
-    //
-    //    // 3. 构建完整的 HTML，注入 CSS 样式
-    //    File notesDir = new File("notes/");
-    //    String baseUrl = notesDir.toURI().toString();
-    //    // 1. removeHighlights(): 清除旧的高亮
-    //    // 2. highlightAll(keyword): 遍历文本节点，给匹配的词加上 <span class="search-highlight">
-    //    String jsScript = """
-    //                <script>
-    //                    // 清除所有高亮标签，还原文本
-    //                    function removeHighlights() {
-    //                        const highlights = document.querySelectorAll('span.search-highlight');
-    //                        highlights.forEach(span => {
-    //                            const parent = span.parentNode;
-    //                            parent.replaceChild(document.createTextNode(span.textContent), span);
-    //                            parent.normalize(); // 合并相邻文本节点
-    //                        });
-    //                    }
-    //
-    //                    // 高亮关键词并返回匹配数量
-    //                    function highlightAll(keyword) {
-    //                        removeHighlights(); // 先清除旧的
-    //                        if (!keyword) return 0;
-    //
-    //                        // 使用 TreeWalker 遍历纯文本节点，避免破坏 HTML 标签结构
-    //                        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-    //                        const nodes = [];
-    //                        while(walk.nextNode()) nodes.push(walk.currentNode);
-    //
-    //                        let count = 0;
-    //                        // 正则：转义特殊字符，gi 表示全局+忽略大小写
-    //                        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-    //                        const regex = new RegExp('(' + escapeRegExp(keyword) + ')', 'gi');
-    //
-    //                        nodes.forEach(node => {
-    //                            // 跳过 script 和 style 标签内部
-    //                            if (node.parentNode.nodeName === "SCRIPT" || node.parentNode.nodeName === "STYLE") return;
-    //
-    //                            const text = node.nodeValue;
-    //                            if (regex.test(text)) {
-    //                                const fragment = document.createDocumentFragment();
-    //                                let lastIdx = 0;
-    //
-    //                                text.replace(regex, (match, p1, offset) => {
-    //                                    // 1. 添加匹配前的普通文本
-    //                                    fragment.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
-    //
-    //                                    // 2. 添加高亮节点
-    //                                    const span = document.createElement('span');
-    //                                    span.className = 'search-highlight';
-    //                                    span.textContent = match;
-    //                                    if (count === 0) span.id = 'first-match'; // 标记第一个
-    //                                    fragment.appendChild(span);
-    //
-    //                                    lastIdx = offset + match.length;
-    //                                    count++;
-    //                                });
-    //
-    //                                // 3. 添加剩余文本
-    //                                fragment.appendChild(document.createTextNode(text.slice(lastIdx)));
-    //                                node.parentNode.replaceChild(fragment, node);
-    //                            }
-    //                        });
-    //
-    //                        // 自动滚动到第一个结果
-    //                        const first = document.getElementById('first-match');
-    //                        if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
-    //
-    //                        return count;
-    //                    }
-    //                </script>
-    //            """;
-    //    // 3. 拼接完整的 HTML 结构
-    //    String htmlContent = "<!DOCTYPE html>"
-    //            + "<html>"
-    //            + "<head>"
-    //            + "    <meta charset=\"UTF-8\">"
-    //            // 关键点：告诉 WebView 所有的相对路径(如 images/1.png) 都要去 baseUrl 下面找
-    //            + "    <base href=\"" + baseUrl + "\">"
-    //            + "    <style>"
-    //            + "        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }"
-    //            + "        /* 推荐：限制图片最大宽度，防止图片太大撑破屏幕 */"
-    //            + "        img { max-width: 100%; height: auto; }"
-    //            // --- CSS 高亮样式 ---
-    //            + "    .search-highlight { background-color: #ffeb3b; color: #000; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.2); }"
-    //            + "    </style>"
-    //            + "</head>"
-    //            + "<body>"
-    //            + markdownHtml
-    //            + jsScript // 注入 JS
-    //            + "</body>"
-    //            + "</html>";
-    //    String html = buildHtml(htmlContent, isDark);
-    //    // 4. 加载内容
-    //    webView.getEngine().loadContent(html);
-    //}
 
     /**
      * 核心：更新预览区
@@ -3178,99 +3080,213 @@ DeepMind Note 拥有强大的图片管理功能：
      * 【新方法】根据当前 JavaFX 主题获取对应的 WebView CSS 样式
      * 颜色值与 style.css 严格对应
      */
+    // MainController.java
+
+    /**
+     * 根据当前 JavaFX 主题获取对应的 WebView CSS 样式
+     * 包含选中颜色一致性修复
+     */
+    /**
+     * 根据当前 JavaFX 主题获取对应的 WebView CSS 样式
+     * 修复了表格(Table)和代码块(Code)在暗黑模式下的显示问题
+     */
+    /**
+     * 根据当前 JavaFX 主题获取对应的 WebView CSS 样式
+     * 【终极修复版】强制覆盖所有元素的文字颜色，解决标题和表格文字偏暗的问题
+     */
+    /**
+     * 根据当前 JavaFX 主题获取对应的 WebView CSS 样式
+     * 【护眼暗黑版】柔化文字亮度，重新设计现代化表格，修复代码块突兀问题
+     */
     private String getThemeRenderCss() {
-        // 检测当前容器的样式类
         boolean isDark = rootContainer.getStyleClass().contains("theme-dark");
         boolean isGreen = rootContainer.getStyleClass().contains("theme-green");
         boolean isOrange = rootContainer.getStyleClass().contains("theme-orange");
 
-        String bgColor, textColor, linkColor, codeBg, quoteColor;
+        // 颜色定义
+        String bgColor, mainTextColor, linkColor;
+        String selectionBg, selectionText;
+        // 代码块颜色
+        String blockCodeBg, blockCodeColor;
+        String inlineCodeBg, inlineCodeText, inlineCodeBorder;
+        // 表格颜色
+        String tableHeaderBg, tableBorderColor, tableRowHover;
+        String quoteBorder, quoteText;
 
         if (isDark) {
-            // 暗夜黑
+            // === 暗黑模式 (护眼微调) ===
             bgColor = "#1e1f22";
-            textColor = "#dfe1e5";
-            linkColor = "#589df6";
-            codeBg = "#2b2d30";
-            quoteColor = "#6c757d";
-        } else if (isGreen) {
-            // 森系绿
-            bgColor = "#fcfdfc";
-            textColor = "#2c3e50";
-            linkColor = "#42b983";
-            codeBg = "#f0f9f4"; // 浅绿背景
-            quoteColor = "#7f8c8d";
-        } else if (isOrange) {
-            // 暖阳橙
-            bgColor = "#fffdf9";
-            textColor = "#5d4037";
-            linkColor = "#ff9f43";
-            codeBg = "#fff5e6"; // 浅橙背景
-            quoteColor = "#a1887f";
+            mainTextColor = "#d1d5db";      // [改] 云母灰 (约85%白)，不再刺眼
+            linkColor = "#58a6ff";          // 柔和蓝
+
+            // 代码块 (大块)
+            blockCodeBg = "#26292e";        // 深灰背景
+            blockCodeColor = "#c9d1d9";
+
+            // 行内代码 (小块，如 `java`) - [改] 变为深色，不再是白色方块
+            inlineCodeBg = "rgba(110, 118, 129, 0.4)";
+            inlineCodeText = "#e6edf3";
+            inlineCodeBorder = "rgba(240, 246, 252, 0.15)";
+
+            // 选中色
+            selectionBg = "#264f78";
+            selectionText = "#ffffff";
+
+            // 表格 - [改] 现代化深色表格
+            tableHeaderBg = "#2d333b";      // 深色表头
+            tableBorderColor = "#30363d";   // 极淡边框
+            tableRowHover = "#282c34";      // 鼠标悬停高亮
+
+            quoteBorder = "#3b434b";
+            quoteText = "#8b949e";
         } else {
-            // 默认蓝 (极简白)
-            bgColor = "#ffffff";
-            textColor = "#212529";
-            linkColor = "#3574f0";
-            codeBg = "#f8f9fa";
-            quoteColor = "#6c757d";
+            // ... (其他浅色主题保持默认逻辑，此处为节省篇幅简写，实际请保留你原有的浅色逻辑)
+            // 默认兜底 (浅色)
+            bgColor = "#ffffff"; mainTextColor = "#24292f"; linkColor = "#0969da";
+            blockCodeBg = "#f6f8fa"; blockCodeColor = "#24292f";
+            inlineCodeBg = "rgba(175, 184, 193, 0.2)"; inlineCodeText = "#24292f"; inlineCodeBorder = "rgba(175, 184, 193, 0.2)";
+            selectionBg = "#cce5ff"; selectionText = "#004085";
+            tableHeaderBg = "#f6f8fa"; tableBorderColor = "#d0d7de"; tableRowHover = "#f2f2f2";
+            quoteBorder = "#dfe2e5"; quoteText = "#57606a";
+            if (isGreen) { /* 这里可以填入你之前的绿色逻辑 */ }
+            if (isOrange) { /* 这里可以填入你之前的橙色逻辑 */ }
         }
 
-        // 返回构建好的 CSS
         return String.format("""
+            /* 全局基础 */
             body {
-                background-color: %s;
-                color: %s;
-                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                background-color: %1$s;
+                color: %2$s !important;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Helvetica, Arial, sans-serif;
                 font-size: 15px;
-                line-height: 1.7;
-                padding: 20px;
+                line-height: 1.6;
+                padding: 20px 30px; /* 增加左右留白 */
                 margin: 0;
             }
-            a { color: %s; text-decoration: none; }
+
+            /* 标题：稍微亮一点，形成层级 */
+            h1, h2, h3, h4, h5, h6 {
+                color: %2$s !important; /* 继承主色，或者稍微调亮 */
+                font-weight: 600;
+                margin-top: 24px;
+                margin-bottom: 16px;
+                line-height: 1.25;
+            }
+            h1, h2 { border-bottom: 1px solid %11$s; padding-bottom: 0.3em; } /* 标题下加条淡线 */
+
+            /* 链接 */
+            a { color: %5$s; text-decoration: none; }
             a:hover { text-decoration: underline; }
-            pre, code {
-                background-color: %s;
-                font-family: 'Consolas', 'Menlo', monospace;
-                border-radius: 4px;
-                padding: 2px 4px;
-                font-size: 0.9em;
-            }
-            pre { padding: 10px; overflow-x: auto; }
+
+            /* 引用块 */
             blockquote {
-                border-left: 4px solid %s;
+                border-left: 4px solid %13$s;
+                margin: 0 0 16px 0;
+                padding: 0 1em;
+                color: %14$s !important;
+            }
+
+            /* === 现代化表格设计 (重点修改) === */
+            table {
+                border-spacing: 0;
+                border-collapse: collapse;
+                width: 100%%;
+                margin: 16px 0;
+                font-size: 14px;
+                border-radius: 6px;       /* 圆角 */
+                overflow: hidden;         /* 配合圆角 */
+                border: 1px solid %11$s;  /* 外框 */
+            }
+            
+            /* 表头：深色背景，不再是白色 */
+            th {
+                background-color: %10$s !important; 
+                color: %2$s !important;
+                font-weight: 600;
+                text-align: left;
+                padding: 10px 13px;
+                border-bottom: 1px solid %11$s; /* 只留底边框 */
+                border-right: 1px solid %11$s;  /* 竖线 */
+            }
+            th:last-child { border-right: none; }
+
+            /* 单元格 */
+            td {
+                padding: 10px 13px;
+                border-bottom: 1px solid %11$s; /* 横向分割线 */
+                border-right: 1px solid %11$s;  /* 竖向分割线 */
+                color: %2$s !important;
+            }
+            td:last-child { border-right: none; }
+            
+            /* 去除最后一行底边框 */
+            tr:last-child td { border-bottom: none; }
+
+            /* 隔行变色 (斑马纹) - 极淡 */
+            tr:nth-child(even) { background-color: rgba(127, 127, 127, 0.02); }
+            /* 悬停高亮 */
+            tr:hover { background-color: %12$s; }
+
+
+            /* === 代码块 (Pre) === */
+            pre {
+                background-color: %6$s;
+                color: %7$s;
+                padding: 16px;
+                border-radius: 6px;
+                overflow-x: auto;
+                font-family: 'JetBrains Mono', 'Consolas', monospace;
+                font-size: 85%%;
+                line-height: 1.45;
+                border: 1px solid %11$s; /* 微弱边框 */
+            }
+
+            /* === 行内代码 (Code) - 修复“白色补丁”问题 === */
+            code {
+                background-color: %8$s !important; /* 半透明深灰 */
+                color: %9$s !important;            /* 亮灰文字 */
+                border: 1px solid %15$s;           /* 极淡描边 */
+                font-family: 'JetBrains Mono', 'Consolas', monospace;
+                padding: 0.2em 0.4em;
                 margin: 0;
-                padding-left: 15px;
-                color: %s;
+                font-size: 85%%;
+                border-radius: 4px;
             }
-            
-            ol {
-                list-style-type: decimal;
-                margin-block-start: 1em; /* 增加列表上方的间距 */
-                margin-block-end: 1em;
+            /* 避免 pre 里的 code 重复样式 */
+            pre code {
+                background-color: transparent !important;
+                color: inherit !important;
+                padding: 0;
+                border: none;
+                font-size: 100%%;
             }
+
+            /* 选中效果 */
+            ::selection { background-color: %3$s; color: %4$s; }
             
-            /* 替换 MainController 中 CSS 字符串里的列表与段落部分为下面内容 */
-            p { margin-top: 0; margin-bottom: 16px; line-height: 1.6; }
-            ul, ol { margin-top: 0; margin-bottom: 16px; padding-left: 40px; line-height: 1.6; }
-            li { margin-bottom: 8px; }
-            li p { margin: 0 0 8px 0; }
-            ul ul, ul ol, ol ul, ol ol { margin-bottom: 8px; padding-left: 20px; }
+            img { max-width: 100%%; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
             
-            img { max-width: 100%%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
-            /* 搜索高亮样式 */
-            .search-highlight {
-                background-color: #ffeb3b;
-                color: #000;
-                border-radius: 2px;
-                box-shadow: 0 0 2px rgba(0,0,0,0.2);
-            }
-            /* 滚动条样式优化 (Chrome内核) */
-            ::-webkit-scrollbar { width: 8px; height: 8px; }
-            ::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.3); border-radius: 4px; }
+            /* 滚动条美化 */
+            ::-webkit-scrollbar { width: 10px; height: 10px; }
+            ::-webkit-scrollbar-thumb { background: #555; border-radius: 5px; border: 2px solid %1$s; }
             ::-webkit-scrollbar-track { background: transparent; }
             """,
-                bgColor, textColor, linkColor, codeBg, linkColor, quoteColor
+                // 参数列表
+                bgColor,           // 1. 背景
+                mainTextColor,     // 2. 主文字 (护眼灰)
+                selectionBg,       // 3. 选中背景
+                selectionText,     // 4. 选中文字
+                linkColor,         // 5. 链接
+                blockCodeBg,       // 6. 大代码块背景
+                blockCodeColor,    // 7. 大代码块文字
+                inlineCodeBg,      // 8. 行内代码背景 (修复重点)
+                inlineCodeText,    // 9. 行内代码文字
+                tableHeaderBg,     // 10. 表头背景 (修复重点)
+                tableBorderColor,  // 11. 表格边框 (修复重点)
+                tableRowHover,     // 12. 表格悬停
+                quoteBorder,       // 13. 引用边框
+                quoteText,         // 14. 引用文字
+                inlineCodeBorder   // 15. 行内代码描边
         );
     }
 
