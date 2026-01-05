@@ -747,6 +747,7 @@ public class MainController {
                 + "</html>";
 
         // 6. 加载
+        webView.getEngine().loadContent("");
         webView.getEngine().loadContent(fullHtml);
 
         // 7. 如果搜索框有内容，重新触发一次高亮（防止切换视图后高亮消失）
@@ -2430,49 +2431,143 @@ public class MainController {
     // 3. 段落功能实现 (对应菜单和右键)
     // =====================================================
 
-    @FXML private void handleUnorderedList() { insertAtLineStart("-"); }
-    @FXML private void handleOrderedList() { insertAtLineStart("1."); }
+    @FXML private void handleUnorderedList() {
+//        insertAtLineStart("-");
+        processListAction(false);
+    }
+    @FXML private void handleOrderedList() {
+//        insertAtLineStart("1.");
+        processListAction(true);
+    }
+
+    /**
+     * 通用列表处理逻辑：支持多行、支持有序列表自动递增
+     * @param isOrdered true=有序列表(1. 2.), false=无序列表(- )
+     */
+    private void processListAction(boolean isOrdered) {
+        String text = editorArea.getText();
+        IndexRange selection = editorArea.getSelection();
+
+        // 1. 确定我们要处理的文本范围（扩展到行首和行尾）
+        int start = selection.getStart();
+        int end = selection.getEnd();
+
+        // 找到第一行的行首
+        int lineStart = (start == 0) ? 0 : text.lastIndexOf('\n', start - 1) + 1;
+        // 找到最后一行的行尾
+        int lineEnd = text.indexOf('\n', end);
+        if (lineEnd == -1) lineEnd = text.length();
+
+        // 2. 截取这段完整的文本
+        String selectedContent = text.substring(lineStart, lineEnd);
+        String[] lines = selectedContent.split("\n", -1); // -1 保留空行结构
+
+        StringBuilder newContent = new StringBuilder();
+        int currentNumber = 1;
+
+        // 3. 如果是有序列表，先侦测上一行的数字
+        if (isOrdered && lineStart > 0) {
+            // 往前找一行
+            int prevLineEnd = lineStart - 1;
+            int prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1;
+            if (prevLineStart >= 0 && prevLineEnd > prevLineStart) {
+                String prevLine = text.substring(prevLineStart, prevLineEnd);
+                // 正则匹配行首的数字 (例如 "1. " 或 "10. ")
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile("^\\s*(\\d+)\\.");
+                java.util.regex.Matcher m = p.matcher(prevLine);
+                if (m.find()) {
+                    try {
+                        currentNumber = Integer.parseInt(m.group(1)) + 1;
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+
+        // 4. 遍历每一行进行处理
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+
+            if (isOrdered) {
+                // 有序列表：添加 "1. ", "2. " ...
+                // 逻辑：直接在行首加数字
+                newContent.append(currentNumber).append(". ").append(line);
+                currentNumber++;
+            } else {
+                // 无序列表：添加 "- "
+                // 逻辑：直接在行首加 "- "
+                newContent.append("- ").append(line);
+            }
+
+            // 如果不是最后一行，补回换行符
+            if (i < lines.length - 1) {
+                newContent.append("\n");
+            }
+        }
+
+        // 5. 替换编辑区文本
+        editorArea.replaceText(lineStart, lineEnd, newContent.toString());
+
+        // 6. 恢复选中状态（可选，方便用户连续操作）
+        editorArea.selectRange(lineStart, lineStart + newContent.length());
+        editorArea.requestFocus();
+    }
+
     private void insertListMarker(String marker) {
         int caretPos = editorArea.getCaretPosition();
         int lineStart = getLineStartPosition(caretPos);
 
         editorArea.insertText(lineStart, marker);
     }
+    /**
+     * 处理回车键的自动列表逻辑
+     * @return true=已处理(拦截默认换行), false=未处理(执行默认换行)
+     */
     private boolean handleAutoList() {
         int caretPos = editorArea.getCaretPosition();
         String text = editorArea.getText();
 
-        // 1. 获取当前行内容
+        // 防止在文件最开始按回车报错
+        if (caretPos == 0) return false;
+
         int start = getLineStartPosition(caretPos);
         int end = caretPos;
+
+        // 获取当前行光标之前的内容
         String currentLine = text.substring(start, end);
 
-        // 2. 判断是否有序列表 (匹配 "数字. ")
+        // --- 1. 判断有序列表 (匹配 "1. ", "2. " 等) ---
         java.util.regex.Pattern orderedPattern = java.util.regex.Pattern.compile("^(\\d+)\\.\\s.*");
         java.util.regex.Matcher orderedMatcher = orderedPattern.matcher(currentLine);
 
         if (orderedMatcher.find()) {
-            // 如果当前行只有 "1. " 且用户按回车，说明想结束列表
+            // 情况 A: 当前行只有 "1. " (空项)，用户按回车 -> 结束列表
             if (currentLine.trim().matches("^\\d+\\.$")) {
-                editorArea.replaceText(start, end, ""); // 清空当前行标志
+                editorArea.replaceText(start, end, ""); // 清空当前行的标记
+                return true; // 【关键修复】返回 true，阻止系统再换一行！
+            }
+
+            // 情况 B: 正常换行，自动生成下一级数字
+            try {
+                int currentNum = Integer.parseInt(orderedMatcher.group(1));
+                String nextMarker = "\n" + (currentNum + 1) + ". ";
+                editorArea.insertText(caretPos, nextMarker);
+                return true; // 拦截默认回车
+            } catch (NumberFormatException e) {
                 return false;
             }
-            // 获取当前数字并自增
-            int currentNum = Integer.parseInt(orderedMatcher.group(1));
-            String nextMarker = "\n" + (currentNum + 1) + ". ";
-            editorArea.insertText(caretPos, nextMarker);
-            return true;
         }
 
-        // 3. 判断是否无序列表 (匹配 "- ")
+        // --- 2. 判断无序列表 (匹配 "- ") ---
         if (currentLine.startsWith("- ")) {
-            // 如果只有 "- " 就按回车，结束列表
+            // 情况 A: 当前行只有 "- " (空项) -> 结束列表
             if (currentLine.trim().equals("-")) {
                 editorArea.replaceText(start, end, "");
-                return false;
+                return true; // 【关键修复】返回 true，阻止系统再换一行！
             }
+
+            // 情况 B: 正常换行，延续 "- "
             editorArea.insertText(caretPos, "\n- ");
-            return true;
+            return true; // 拦截默认回车
         }
 
         return false;
@@ -3148,6 +3243,20 @@ DeepMind Note 拥有强大的图片管理功能：
                 padding-left: 15px;
                 color: %s;
             }
+            
+            ol {
+                list-style-type: decimal;
+                margin-block-start: 1em; /* 增加列表上方的间距 */
+                margin-block-end: 1em;
+            }
+            
+            /* 替换 MainController 中 CSS 字符串里的列表与段落部分为下面内容 */
+            p { margin-top: 0; margin-bottom: 16px; line-height: 1.6; }
+            ul, ol { margin-top: 0; margin-bottom: 16px; padding-left: 40px; line-height: 1.6; }
+            li { margin-bottom: 8px; }
+            li p { margin: 0 0 8px 0; }
+            ul ul, ul ol, ol ul, ol ol { margin-bottom: 8px; padding-left: 20px; }
+            
             img { max-width: 100%%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
             /* 搜索高亮样式 */
             .search-highlight {

@@ -1,8 +1,11 @@
 package com.deepmind.util;
+import com.vladsch.flexmark.ext.tables.TablesExtension;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 import com.vladsch.flexmark.parser.ParserEmulationProfile;
+
+import java.util.Arrays;
 
 public class MarkdownParser {
     public static String parse(String md) {
@@ -19,6 +22,9 @@ public class MarkdownParser {
         // 2. 标准解析
         MutableDataSet options = new MutableDataSet();
         options.setFrom(ParserEmulationProfile.GITHUB_DOC);
+        // 允许表格解析
+        options.set(Parser.EXTENSIONS, Arrays.asList(TablesExtension.create()));
+
         options.set(HtmlRenderer.SOFT_BREAK, "<br />");
         Parser parser = Parser.builder(options).build();
         HtmlRenderer renderer = HtmlRenderer.builder(options).build();
