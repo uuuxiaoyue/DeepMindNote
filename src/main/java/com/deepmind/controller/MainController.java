@@ -1,7 +1,9 @@
 package com.deepmind.controller;
 
-import com.deepmind.util.*;
-import javafx.animation.PauseTransition;
+import com.deepmind.util.FileUtil;
+import com.deepmind.util.MarkdownParser;
+import com.deepmind.util.NoteMetadata;
+import com.deepmind.util.OutlineItem;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -11,7 +13,6 @@ import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
-import javafx.util.Duration;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -37,7 +38,8 @@ public class MainController {
     @FXML private VBox sidebarContainer;
 
     // --- 右侧大纲 ---
-    @FXML private ListView<String> outlineListView;
+    @FXML
+    private ListView<OutlineItem> outlineListView;
     @FXML private VBox outlineContainer;
 
     // --- 整体布局与工具栏 ---
@@ -649,6 +651,23 @@ public class MainController {
                     if (first) first.scrollIntoView({behavior: "smooth", block: "center"});
                     return count;
                 }
+                         function scrollToHeading(index) {
+                                            // 获取页面中所有的标题标签 (h1 到 h6)
+                                            // querySelectorAll 返回的顺序就是文档中的出现顺序
+                                            const headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                                           \s
+                                            if (headers[index]) {
+                                                headers[index].scrollIntoView({behavior: "smooth", block: "start"});
+                                               \s
+                                                // 可选：给标题加个临时的闪烁效果，提示用户跳到了这里
+                                                headers[index].style.transition = "background-color 0.5s";
+                                                const originalBg = headers[index].style.backgroundColor;
+                                                headers[index].style.backgroundColor = "#fff3cd"; // 浅黄色
+                                                setTimeout(() => {
+                                                    headers[index].style.backgroundColor = originalBg;
+                                                }, 1000);
+                                            }
+                                        }
             </script>
             """;
 
@@ -941,76 +960,93 @@ public class MainController {
         }
     }
     private void setupOutline() {
+        // 1. 生成大纲
         editorArea.textProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal == null) return;
-
-            // 1. 第一步：先解析出所有原始标题和它们的实际层级
-            class Heading {
-                int originalLevel;
-                String text;
-                Heading(int l, String t) { this.originalLevel = l; this.text = t; }
+            if (newVal == null || newVal.isEmpty()) {
+                outlineListView.getItems().clear();
+                return;
             }
 
-            List<Heading> rawHeadings = new ArrayList<>();
-            TreeSet<Integer> actualLevels = new TreeSet<>(); // 自动去重并排序等级
+            class TempHeading {
+                int level;
+                String text;
+                int index;
+                int order;
 
-            String[] lines = newVal.split("\n");
-            for (String line : lines) {
-                String trimmedLine = line.trim();
-                if (trimmedLine.startsWith("#")) {
-                    int level = 0;
-                    while (level < trimmedLine.length() && trimmedLine.charAt(level) == '#') level++;
-                    String titleText = trimmedLine.substring(level).trim();
-                    if (!titleText.isEmpty()) {
-                        rawHeadings.add(new Heading(level, titleText));
-                        actualLevels.add(level); // 记录出现的等级，比如 1, 2, 4
-                    }
+                TempHeading(int l, String t, int i, int o) {
+                    this.level = l;
+                    this.text = t;
+                    this.index = i;
+                    this.order = o;
                 }
             }
+            List<TempHeading> tempList = new ArrayList<>();
+            TreeSet<Integer> levels = new TreeSet<>();
 
-            // 2. 第二步：建立等级映射 (解决你说的 4 级跳 3 级的问题)
-            // 比如实际出现了 [1, 2, 4]，那么 4 级会被映射为索引 2 (即第 3 个出现的等级)
-            List<Integer> sortedLevels = new ArrayList<>(actualLevels);
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?m)^(#+)\\s+(.*)$");
+            java.util.regex.Matcher matcher = pattern.matcher(newVal);
 
-            List<String> displayHeadings = new ArrayList<>();
-            for (Heading h : rawHeadings) {
-                // 获取当前标题在“实际出现的等级”中的位置
-                int mappedLevel = sortedLevels.indexOf(h.originalLevel);
+            int headingCount = 0; // 【新增】标题计数器
 
-                // 3. 更有设计感的图标
-                // 第一级用实心菱形，第二级用空心菱形，之后用小箭头
+            while (matcher.find()) {
+                String hashes = matcher.group(1);
+                String title = matcher.group(2);
+                int startIndex = matcher.start();
+                int level = hashes.length();
+
+                // 记录这是第几个标题 (headingCount++)
+                tempList.add(new TempHeading(level, title, startIndex, headingCount++));
+                levels.add(level);
+            }
+
+            List<Integer> sortedLevels = new ArrayList<>(levels);
+            List<OutlineItem> displayItems = new ArrayList<>();
+
+            for (TempHeading h : tempList) {
+                int mappedLevel = sortedLevels.indexOf(h.level);
                 String marker = switch (mappedLevel) {
                     case 0 -> "◈ ";
                     case 1 -> "◇ ";
                     case 2 -> "▹ ";
-                    default -> "  ▪ ";
+                    default -> "▪ ";
                 };
-
-                // 使用映射后的等级来计算缩进，每个级别缩进 2 个全角空格或 4 个半角
                 String indent = "  ".repeat(Math.max(0, mappedLevel));
-                displayHeadings.add(indent + marker + h.text);
+
+                // 【关键】传入 h.order (第几个标题)
+                displayItems.add(new OutlineItem(indent + marker + h.text, h.index, h.order));
             }
 
-            outlineListView.getItems().setAll(displayHeadings);
+            outlineListView.getItems().setAll(displayItems);
         });
 
-        // 点击跳转逻辑 (保持不变，但修正了之前的 scrollTop 警告)
-        outlineListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                // 增强正则：过滤掉所有前缀符号和缩进
-                String pureTitle = newVal.trim().replaceAll("^[◈◇▹▪\\s]+", "");
-                String content = editorArea.getText();
+        // 2. 点击跳转 (支持双模式)
+        outlineListView.setOnMouseClicked(event -> {
+            OutlineItem selected = outlineListView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
 
-                String[] lines = content.split("\n");
-                int currentIndex = 0;
-                for (String line : lines) {
-                    if (line.trim().contains("#") && line.contains(pureTitle)) {
-                        editorArea.requestFocus();
-                        editorArea.selectRange(currentIndex, currentIndex + line.length());
-                        editorArea.scrollTopProperty(); // 使用这个代替 scrollTopProperty 避免警告
-                        break;
-                    }
-                    currentIndex += line.length() + 1;
+                // =================================================
+                // 场景 A: 预览模式 (WebView) -> 调用 JS 跳转
+                // =================================================
+                if (webView.isVisible()) {
+                    // 调用刚才注入的 JS 函数，传入 orderIndex
+                    webView.getEngine().executeScript("scrollToHeading(" + selected.orderIndex + ")");
+                    // 让 WebView 获取焦点，以便键盘上下滚动
+                    webView.requestFocus();
+                }
+
+                // =================================================
+                // 场景 B: 编辑模式 (TextArea) -> 光标跳转
+                // =================================================
+                else {
+                    editorArea.requestFocus();
+                    editorArea.positionCaret(selected.startIndex);
+
+                    String text = editorArea.getText();
+                    int endIndex = text.indexOf('\n', selected.startIndex);
+                    if (endIndex == -1) endIndex = text.length();
+
+                    editorArea.selectRange(selected.startIndex, endIndex);
+                    editorArea.setScrollTop(Double.MIN_VALUE);
                 }
             }
         });
