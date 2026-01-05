@@ -21,6 +21,8 @@ module com.deepmind {
     requires flexmark.ext.tables;
     requires flexmark.ext.anchorlink;
     requires java.prefs;
+    requires org.apache.pdfbox;
+    requires org.apache.poi.poi;
     requires flexmark.ext.autolink;
     requires flexmark.util.misc;
 
@@ -32,6 +34,4 @@ module com.deepmind {
 
     // 4. 导出主程序所在的包
     exports com.deepmind;
-
-
 }

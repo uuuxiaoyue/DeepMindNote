@@ -1,5 +1,7 @@
 package com.deepmind.util;
 import com.vladsch.flexmark.ext.tables.TablesExtension;
+
+import com.vladsch.flexmark.ext.ins.InsExtension;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
@@ -54,6 +56,8 @@ public class MarkdownParser {
                         "  th { background-color: #f5f5f5; } " +
                         "  pre { background-color: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; } " +
                         "  code { font-family: 'Consolas', monospace; background-color: rgba(27,31,35,0.05); } " +
+                        "  img { max-width: 100%; height: auto; display: block; margin: 10px 0; } " + // 保证图片不超出
+                        "  pre code { background-color: transparent; padding: 0; } " +
                         ":not(pre) > code { background-color: #f0f0f0; color: #e06c75; padding: 2px 4px; border-radius: 3px; }" +
                         "</style>";
 
